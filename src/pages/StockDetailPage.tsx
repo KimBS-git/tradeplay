@@ -99,7 +99,6 @@ export default function StockDetailPage() {
   const sign = isUp ? '+' : ''
   const formatUSD = (p: number) => `$${p.toFixed(2)}`
   const formatKRW = (p: number) => `${Math.round(p).toLocaleString()}원`
-  const formatPrice = (p: number) => formatKRW(p)
 
   // 현재 종목과 연관된 뉴스만 필터링
   const relatedNews = newsFeed.filter((n) => n.relatedStockIds.includes(stock.id))

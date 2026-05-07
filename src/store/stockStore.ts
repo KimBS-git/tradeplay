@@ -167,10 +167,7 @@ export const useStockStore = create<StockState>((set, get) => ({
         // KR은 랜덤 변동을 제거하고 "고정 기준가"를 유지한다.
         if (stock.market === 'KR') return stock
         const randomChange = (Math.random() - 0.5) * 0.006 // ±0.3%
-        const newPrice =
-          stock.market === 'KR'
-            ? Math.round(stock.price * (1 + randomChange))
-            : Math.round(stock.price * (1 + randomChange) * 100) / 100
+        const newPrice = Math.round(stock.price * (1 + randomChange) * 100) / 100
         const change = newPrice - stock.prevPrice
         const changePercent = (change / stock.prevPrice) * 100
         return { ...stock, price: newPrice, change, changePercent }
