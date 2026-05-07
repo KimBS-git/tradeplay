@@ -30,13 +30,21 @@ export default function LoginPage() {
       // ── 회원가입 ──────────────────────────────────
       // 가입 성공 → 로컬 상태만 초기화 (DB에는 profiles 삽입까지 완료됨)
       const ok = await signup(username, password, name)
-      if (!ok) { setError('이미 사용 중인 아이디입니다.'); return }
+      if (!ok) {
+        const msg = useAuthStore.getState().lastAuthError ?? '회원가입에 실패했습니다.'
+        setError(msg)
+        return
+      }
       initCash(10_000_000)  // 신규 계좌 로컬 초기화
       navigate('/')
     } else {
       // ── 로그인 ────────────────────────────────────
       const ok = await login(username, password)
-      if (!ok) { setError('아이디 또는 비밀번호가 올바르지 않습니다.'); return }
+      if (!ok) {
+        const msg = useAuthStore.getState().lastAuthError ?? '아이디 또는 비밀번호가 올바르지 않습니다.'
+        setError(msg)
+        return
+      }
 
       const user = useAuthStore.getState().currentUser
       if (user && !user.isAdmin) {
