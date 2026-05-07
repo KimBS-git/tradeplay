@@ -7,7 +7,7 @@
 // (다른 페이지에서도 동일 패턴을 사용한다.)
 // =====================================================
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStockStore } from '../store/stockStore'
 import MarketIndex from '../components/MarketIndex'
@@ -25,19 +25,10 @@ const TAB_LABELS: { value: MarketTab; label: string }[] = [
 ]
 
 export default function HomePage() {
-  const { stocks, updatePrices } = useStockStore()
+  const { stocks } = useStockStore()
   const newsFeed = useNewsStore((s) => s.feed)
   const navigate = useNavigate()
   const [marketTab, setMarketTab] = useState<MarketTab>('ALL')
-
-  // ── 실시간 주가 갱신 ──────────────────────────
-  // 3초 간격으로 updatePrices를 호출해 주가와 시장 지수를 변동시킨다.
-  // updatePrices를 의존성으로 포함하는 이유:
-  //   Zustand 함수 참조는 안정적이지만 eslint 규칙 준수를 위해 명시한다.
-  useEffect(() => {
-    const interval = setInterval(updatePrices, 3000)
-    return () => clearInterval(interval)
-  }, [updatePrices])
 
   // ── 종목 필터링 및 TOP5 정렬 ──────────────────
   // 탭에 따라 전체/국내/미국 종목을 걸러낸 뒤 변동률 기준으로 정렬한다.

@@ -4,7 +4,6 @@
 // 비로그인 상태에서는 로그인 유도 화면을 보여준다.
 // =====================================================
 
-import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStockStore } from '../store/stockStore'
 import { useAuthStore } from '../store/authStore'
@@ -18,15 +17,9 @@ function formatKRW(n: number) {
 
 export default function AccountPage() {
   const { currentUser: user } = useAuthStore()
-  const { stocks, holdings, transactions, cashBalance, updatePrices, getTotalAsset, getTotalPnl } =
+  const { stocks, holdings, transactions, cashBalance, getTotalAsset, getTotalPnl } =
     useStockStore()
   const navigate = useNavigate()
-
-  // 3초마다 주가 갱신 — 보유 종목 평가금액이 실시간으로 변동되게 한다
-  useEffect(() => {
-    const interval = setInterval(updatePrices, 3000)
-    return () => clearInterval(interval)
-  }, [updatePrices])
 
   // ── 비로그인 처리 ────────────────────────────
   if (!user) {

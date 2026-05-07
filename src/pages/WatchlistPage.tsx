@@ -4,7 +4,6 @@
 // 비로그인 상태에서는 로그인 유도 화면을 보여준다.
 // =====================================================
 
-import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useWatchlistStore } from '../store/watchlistStore'
 import { useStockStore } from '../store/stockStore'
@@ -13,15 +12,9 @@ import StockCard from '../components/StockCard'
 
 export default function WatchlistPage() {
   const { watchlist } = useWatchlistStore()
-  const { stocks, updatePrices } = useStockStore()
+  const { stocks } = useStockStore()
   const { currentUser: user } = useAuthStore()
   const navigate = useNavigate()
-
-  // 3초마다 주가 갱신 — 관심 종목의 실시간 가격 변동을 반영한다
-  useEffect(() => {
-    const interval = setInterval(updatePrices, 3000)
-    return () => clearInterval(interval)
-  }, [updatePrices])
 
   // watchlist(ID 배열)를 기준으로 실제 종목 데이터를 조회한다
   const watchedStocks = stocks.filter((s) => watchlist.includes(s.id))
