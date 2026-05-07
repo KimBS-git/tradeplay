@@ -95,32 +95,6 @@ export async function getQuote(symbol: string): Promise<{
   }
 }
 
-// ── Yahoo Finance 한국 종목 시세 조회 ─────────────────
-// Finnhub 무료 플랜은 KOSPI 실시간 데이터를 지원하지 않으므로
-// Yahoo Finance 비공식 API를 사용한다 (API 키 불필요, 지연 시세 제공).
-// symbol 형식: '005930.KS', '000660.KS' 등
-export async function getKRQuote(symbol: string): Promise<{
-  price: number; prevPrice: number; change: number; changePercent: number
-} | null> {
-  try {
-    const res = await fetch(
-      `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`,
-      { headers: { Accept: 'application/json' } }
-    )
-    const data = await res.json()
-    const meta = data?.chart?.result?.[0]?.meta
-    if (!meta?.regularMarketPrice) return null
-    return {
-      price: meta.regularMarketPrice,
-      prevPrice: meta.previousClose ?? meta.regularMarketPrice,
-      change: meta.regularMarketChange ?? 0,
-      changePercent: meta.regularMarketChangePercent ?? 0,
-    }
-  } catch {
-    return null
-  }
-}
-
 // ── Yahoo Finance 한국 종목 스냅샷 조회 ─────────────────
 // 하이브리드 가격 적용용: 현재가(regularMarketPrice) 우선,
 // 폴백으로 당일 시가(regularMarketOpen) → 전일 종가(previousClose/close) 순.

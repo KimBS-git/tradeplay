@@ -53,7 +53,6 @@ interface StockState {
   initCash: (balance: number) => void
   setCashBalance: (balance: number) => void
   loadUserData: (userId: string) => Promise<void>
-  updatePrices: () => void
   ensureMockNewsImpactsApplied: () => void
   scheduleDelayedNewsPriceImpact: (item: NewsItem) => void
   flushDueNewsPriceImpacts: () => void
@@ -62,8 +61,8 @@ interface StockState {
   syncRealPrices: () => Promise<void>
   syncKRBaselines: () => Promise<void>
   syncStockPrice: (stockId: string) => Promise<void>
-  buyStock: (stockId: string, quantity: number) => boolean
-  sellStock: (stockId: string, quantity: number) => boolean
+  buyStock: (stockId: string, quantity: number, totalKrw: number) => boolean
+  sellStock: (stockId: string, quantity: number, totalKrw: number) => boolean
   getTotalAsset: () => number
   getTotalPnl: () => number
   reset: () => void
@@ -157,30 +156,6 @@ export const useStockStore = create<StockState>((set, get) => ({
       mockNewsImpactsApplied: false,
       pendingNewsPriceImpacts: [],
     }),
-
-  // ── 주가 시각적 갱신 ─────────────────────────────
-  // 3초마다 호출. 실제 가격은 syncRealPrices/syncStockPrice가 담당하고
-  // 이 함수는 화면이 정적으로 보이지 않도록 0.3% 이내의 미세 변동만 적용한다.
-  updatePrices: () => {
-    set((state) => ({
-      stocks: state.stocks.map((stock) => {
-        // KR은 랜덤 변동을 제거하고 "고정 기준가"를 유지한다.
-        if (stock.market === 'KR') return stock
-        const randomChange = (Math.random() - 0.5) * 0.006 // ±0.3%
-        const newPrice = Math.round(stock.price * (1 + randomChange) * 100) / 100
-        const change = newPrice - stock.prevPrice
-        const changePercent = (change / stock.prevPrice) * 100
-        return { ...stock, price: newPrice, change, changePercent }
-      }),
-      marketIndices: state.marketIndices.map((idx) => {
-        const delta = (Math.random() - 0.5) * 0.2
-        const newValue = Math.round((idx.value * (1 + delta / 100)) * 100) / 100
-        const change = Math.round((newValue - idx.value + idx.change) * 100) / 100
-        const changePercent = Math.round((change / (newValue - change)) * 10000) / 100
-        return { ...idx, value: newValue, change, changePercent }
-      }),
-    }))
-  },
 
   // ── 전체 종목 실시간 가격 동기화 ─────────────────
   // 2분마다 호출. US 종목만 Finnhub으로 갱신한다. (KR은 기준가 고정)
@@ -302,13 +277,13 @@ export const useStockStore = create<StockState>((set, get) => ({
   // ── 매수 ────────────────────────────────────────
   // 1) 잔액·주가 체크 → 로컬 상태 즉시 갱신
   // 2) 백그라운드에서 holdings upsert + transactions insert + profiles.cash_balance 업데이트
-  buyStock: (stockId: string, quantity: number) => {
+  // totalKrw: UI에서 환율을 적용해 계산한 원화 주문금액 (KRW 잔액과 직접 비교)
+  buyStock: (stockId: string, quantity: number, totalKrw: number) => {
     const { stocks, holdings, transactions, cashBalance } = get()
     const stock = stocks.find((s) => s.id === stockId)
     if (!stock) return false
 
-    const totalCost = stock.price * quantity
-    if (totalCost > cashBalance) return false
+    if (totalKrw > cashBalance) return false
 
     const existingHolding = holdings.find((h) => h.stockId === stockId)
     const newQuantity = (existingHolding?.quantity ?? 0) + quantity
@@ -335,11 +310,11 @@ export const useStockStore = create<StockState>((set, get) => ({
       type: 'BUY',
       quantity,
       price: stock.price,
-      totalAmount: totalCost,
+      totalAmount: totalKrw,
       createdAt: new Date().toISOString(),
     }
 
-    const newCashBalance = cashBalance - totalCost
+    const newCashBalance = cashBalance - totalKrw
     set({ holdings: newHoldings, cashBalance: newCashBalance, transactions: [newTransaction, ...transactions] })
 
     // 백그라운드 DB 동기화
@@ -367,7 +342,7 @@ export const useStockStore = create<StockState>((set, get) => ({
           type: 'BUY',
           quantity,
           price: stock.price,
-          total_amount: totalCost,
+          total_amount: totalKrw,
         }),
         supabase.from('profiles').update({ cash_balance: newCashBalance }).eq('id', user.id),
       ])
@@ -379,13 +354,13 @@ export const useStockStore = create<StockState>((set, get) => ({
   // ── 매도 ────────────────────────────────────────
   // 전량 매도 시 holdings 행을 DB에서 삭제한다.
   // 부분 매도 시 quantity를 업데이트(upsert)한다.
-  sellStock: (stockId: string, quantity: number) => {
+  // totalKrw: UI에서 환율을 적용해 계산한 원화 매도금액 (KRW 잔액에 가산)
+  sellStock: (stockId: string, quantity: number, totalKrw: number) => {
     const { stocks, holdings, transactions, cashBalance } = get()
     const holding = holdings.find((h) => h.stockId === stockId)
     const stock = stocks.find((s) => s.id === stockId)
     if (!holding || !stock || holding.quantity < quantity) return false
 
-    const totalRevenue = stock.price * quantity
     const isFullSell = holding.quantity === quantity
     const newHoldings = isFullSell
       ? holdings.filter((h) => h.stockId !== stockId)
@@ -399,11 +374,11 @@ export const useStockStore = create<StockState>((set, get) => ({
       type: 'SELL',
       quantity,
       price: stock.price,
-      totalAmount: totalRevenue,
+      totalAmount: totalKrw,
       createdAt: new Date().toISOString(),
     }
 
-    const newCashBalance = cashBalance + totalRevenue
+    const newCashBalance = cashBalance + totalKrw
     set({ holdings: newHoldings, cashBalance: newCashBalance, transactions: [newTransaction, ...transactions] })
 
     // 백그라운드 DB 동기화
@@ -436,7 +411,7 @@ export const useStockStore = create<StockState>((set, get) => ({
           type: 'SELL',
           quantity,
           price: stock.price,
-          total_amount: totalRevenue,
+          total_amount: totalKrw,
         }),
         supabase.from('profiles').update({ cash_balance: newCashBalance }).eq('id', user.id),
       ])

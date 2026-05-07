@@ -5,7 +5,7 @@
 //
 // price와 prevPrice를 동일하게 설정한 이유:
 //   앱 시작 시점을 '전일 종가와 현재가가 같은 상태'로 보고,
-//   이후 updatePrices()가 호출될 때마다 prevPrice 기준으로 등락이 계산된다.
+//   이후 syncRealPrices/syncKRBaselines가 API 값으로 갱신한다.
 // =====================================================
 
 import type { Stock } from '../types'
@@ -31,8 +31,7 @@ export const initialStocks: Stock[] = [
   { id: 'kr-032830', name: '삼성생명', nameEn: 'Samsung Life', code: '032830', market: 'KR', price: 97500, prevPrice: 97500, change: 0, changePercent: 0, volume: 234567, sector: '보험' },
 
   // ── 미국 주식 (US) ────────────────────────────────
-  // 나스닥·NYSE 대형주. 가격 단위가 달러이므로
-  // updatePrices()에서 소수점 2자리로 반올림하는 분기 처리가 따로 이루어진다.
+  // 나스닥·NYSE 대형주. 가격 단위가 달러(소수점 2자리).
   { id: 'us-AAPL', name: '애플', nameEn: 'Apple Inc.', code: 'AAPL', market: 'US', price: 211.45, prevPrice: 211.45, change: 0, changePercent: 0, volume: 54321098, sector: 'Technology' },
   { id: 'us-MSFT', name: '마이크로소프트', nameEn: 'Microsoft Corp.', code: 'MSFT', market: 'US', price: 415.32, prevPrice: 415.32, change: 0, changePercent: 0, volume: 23456789, sector: 'Technology' },
   { id: 'us-GOOGL', name: '구글', nameEn: 'Alphabet Inc.', code: 'GOOGL', market: 'US', price: 172.85, prevPrice: 172.85, change: 0, changePercent: 0, volume: 18765432, sector: 'Technology' },

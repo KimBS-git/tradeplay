@@ -22,22 +22,3 @@ export function isNewsActiveForPrice(item: NewsItem, now = Date.now()): boolean 
   return now - published >= NEWS_PRICE_EFFECT_DELAY_MS
 }
 
-// ── 종목별 누적 드리프트 계산 ─────────────────────
-// 뉴스 피드 전체를 순회해 10분이 지난 뉴스의 priceImpact를
-// 종목 ID를 키로 합산한 맵을 반환한다.
-//
-// 반환 예시: { 'kr-005930': 4.3, 'us-NVDA': 5.3 }
-//
-// updatePrices()에서 이 맵을 조회해 랜덤 변동폭에 뉴스 방향성을 가미한다.
-// NEUTRAL 뉴스는 합산에서 제외해 의미 없는 드리프트를 차단한다.
-export function accumulateDriftByStock(news: NewsItem[], now = Date.now()): Record<string, number> {
-  const m: Record<string, number> = {}
-  for (const item of news) {
-    if (!isNewsActiveForPrice(item, now)) continue // 아직 10분 미경과
-    if (item.sentiment === 'NEUTRAL') continue      // 중립 뉴스는 드리프트 없음
-    for (const id of item.relatedStockIds) {
-      m[id] = (m[id] ?? 0) + item.priceImpact
-    }
-  }
-  return m
-}

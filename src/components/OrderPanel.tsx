@@ -14,6 +14,15 @@ import { useStockStore } from '../store/stockStore'
 import { useAuthStore } from '../store/authStore'
 import { useUsdKrw } from '../hooks/useUsdKrw'
 
+// 평일 09:00~16:00 KST 범위인지 확인한다.
+function isKRMarketOpen(): boolean {
+  const kst = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }))
+  const day = kst.getDay() // 0=일, 6=토
+  if (day === 0 || day === 6) return false
+  const minutes = kst.getHours() * 60 + kst.getMinutes()
+  return minutes >= 9 * 60 && minutes < 16 * 60
+}
+
 type Tab = 'BUY' | 'SELL'
 
 interface Props {
@@ -32,7 +41,9 @@ export default function OrderPanel({ stock, onClose, className = '' }: Props) {
 
   const holding = holdings.find((h) => h.stockId === stock.id)
   const unitPriceKrw = stock.market === 'KR' ? stock.price : stock.price * USD_TO_KRW
-  const totalCostKrw = unitPriceKrw * quantity
+  const totalCostKrw = Math.round(unitPriceKrw * quantity)
+  const marketClosed = stock.market === 'KR' && !isKRMarketOpen()
+  const maxBuyQty = Math.max(1, Math.floor(cashBalance / unitPriceKrw))
 
   const formatKRW = (p: number) => Math.round(p).toLocaleString() + '원'
   const formatUSD = (p: number) => '$' + p.toFixed(2)
@@ -52,10 +63,24 @@ export default function OrderPanel({ stock, onClose, className = '' }: Props) {
   // 성공 시 모달 모드에서는 1.2초 후 자동으로 닫는다.
   const handleTrade = () => {
     if (!currentUser) return
-    const ok = tab === 'BUY' ? buyStock(stock.id, quantity) : sellStock(stock.id, quantity)
+    const ok = tab === 'BUY'
+      ? buyStock(stock.id, quantity, totalCostKrw)
+      : sellStock(stock.id, quantity, totalCostKrw)
     setResult(ok ? (tab === 'BUY' ? '매수 완료!' : '매도 완료!') : tab === 'BUY' ? '잔액이 부족합니다.' : '보유 수량이 부족합니다.')
     if (ok && onClose) setTimeout(onClose, 1200)
   }
+
+  // ── 버튼 상태 계산 ───────────────────────────
+  const insufficientBalance = tab === 'BUY' && totalCostKrw > cashBalance
+  const insufficientHolding = tab === 'SELL' && (!holding || quantity > holding.quantity)
+  const buttonDisabled = !currentUser || marketClosed || insufficientBalance || insufficientHolding
+  const buttonLabel = (() => {
+    if (!currentUser) return '로그인 후 거래 가능'
+    if (marketClosed) return '장 마감 (09:00 ~ 16:00)'
+    if (insufficientBalance) return '잔액 부족'
+    if (insufficientHolding) return '수량 부족'
+    return tab === 'BUY' ? `${quantity}주 매수` : `${quantity}주 매도`
+  })()
 
   return (
     <div className={`rounded-2xl border border-gray-100 bg-gray-50/80 p-4 ${className}`}>
@@ -72,6 +97,13 @@ export default function OrderPanel({ stock, onClose, className = '' }: Props) {
           </button>
         )}
       </div>
+
+      {/* ── 장 마감 안내 배너 ────────────────────── */}
+      {marketClosed && (
+        <div className="mb-3 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-700 text-center">
+          국내 주식 거래 시간 외 (평일 09:00 ~ 16:00)
+        </div>
+      )}
 
       {/* ── 매수/매도 탭 ──────────────────────────
           한국 주식 UI 관례에 따라 매수는 빨간색, 매도는 파란색으로 표시한다. */}
@@ -122,7 +154,12 @@ export default function OrderPanel({ stock, onClose, className = '' }: Props) {
         />
         <button
           type="button"
-          onClick={() => setQuantity(quantity + 1)}
+          onClick={() => {
+            const next = quantity + 1
+            if (tab === 'BUY' && next > maxBuyQty) return
+            if (tab === 'SELL' && holding && next > holding.quantity) return
+            setQuantity(next)
+          }}
           className="w-8 h-8 rounded-full border border-gray-200 bg-white flex items-center justify-center text-gray-600 hover:bg-gray-50 text-sm"
         >
           +
@@ -168,12 +205,12 @@ export default function OrderPanel({ stock, onClose, className = '' }: Props) {
         <button
           type="button"
           onClick={handleTrade}
-          disabled={!currentUser}
+          disabled={buttonDisabled}
           className={`w-full py-2.5 rounded-xl font-bold text-white text-xs transition ${
             tab === 'BUY' ? 'bg-red-500 hover:bg-red-600' : 'bg-blue-600 hover:bg-blue-700'
           } disabled:opacity-50`}
         >
-          {!currentUser ? '로그인 후 거래 가능' : tab === 'BUY' ? `${quantity}주 매수` : `${quantity}주 매도`}
+          {buttonLabel}
         </button>
       )}
     </div>
