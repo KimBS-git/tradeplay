@@ -66,11 +66,11 @@ export default function StockDetailPage() {
     return () => clearInterval(interval)
   }, [id, syncStockPrice])
 
-  // 종목별 실제 뉴스를 피드에 추가한다
+  // 종목별 뉴스 로드 — KR은 Naver(종목명 검색), US는 Finnhub
   useEffect(() => {
-    if (!id) return
-    loadCompanyNews(id)
-  }, [id, loadCompanyNews])
+    if (!stock) return
+    loadCompanyNews(stock.id, stock.market, stock.name)
+  }, [stock?.id, loadCompanyNews])
 
   // ── 로딩 / 에러 처리 ─────────────────────────
   if (!stock) {

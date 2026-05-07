@@ -43,8 +43,12 @@ interface NewsStoreState {
   loadMarketNews: () => Promise<void>
   /** Naver(한국어) 뉴스 검색 결과를 가져와 피드 앞에 병합한다 */
   loadKoreanMarketNews: (query?: string) => Promise<void>
-  /** 종목 상세 페이지 진입 시 해당 종목의 실제 뉴스를 가져온다 */
-  loadCompanyNews: (stockId: string) => Promise<void>
+  /**
+   * 종목 상세 페이지 진입 시 해당 종목의 뉴스를 가져온다.
+   * - US: Finnhub /company-news (relatedStockIds 자동 세팅)
+   * - KR: Naver API로 종목명 검색 후 relatedStockIds에 stockId 태깅
+   */
+  loadCompanyNews: (stockId: string, market?: 'KR' | 'US', stockName?: string) => Promise<void>
   /** Supabase DB에서 최신 뉴스를 불러와 피드 앞에 병합한다 (폴백용) */
   loadFeed: () => Promise<void>
   /** App.tsx Realtime 핸들러에서 새 뉴스 1건을 피드 앞에 추가한다 */
@@ -77,16 +81,40 @@ export const useNewsStore = create<NewsStoreState>((set) => ({
     })
   },
 
-  // ── Finnhub 종목별 뉴스 로드 ────────────────────
-  // 종목 상세 페이지 진입 시 호출. 해당 종목 뉴스를 피드에 추가한다.
-  loadCompanyNews: async (stockId: string) => {
-    const items = await getCompanyNews(stockId)
-    if (items.length === 0) return
-    set((s) => {
-      const existingIds = new Set(s.feed.map((i) => i.id))
-      const newItems = items.filter((i) => !existingIds.has(i.id))
-      return { feed: [...newItems, ...s.feed].slice(0, MAX_FEED) }
-    })
+  // ── 종목별 뉴스 로드 ────────────────────────────
+  // US: Finnhub /company-news — relatedStockIds가 자동으로 stockId로 세팅된다.
+  // KR: Finnhub은 무료 플랜에서 국내 종목을 지원하지 않으므로
+  //     Naver API로 종목명을 검색한 뒤 결과에 stockId를 태깅한다.
+  //     이미 피드에 있는 항목은 relatedStockIds만 업데이트하고,
+  //     새 항목은 relatedStockIds: [stockId]로 추가한다.
+  loadCompanyNews: async (stockId: string, market?: 'KR' | 'US', stockName?: string) => {
+    if (market === 'KR' && stockName) {
+      const items = await getKoreanMarketNews(stockName)
+      if (items.length === 0) return
+      set((s) => {
+        const resultIds = new Set(items.map((i) => i.id))
+        // 이미 피드에 있는 항목: relatedStockIds에 stockId 추가
+        const updatedFeed = s.feed.map((item) =>
+          resultIds.has(item.id) && !item.relatedStockIds.includes(stockId)
+            ? { ...item, relatedStockIds: [...item.relatedStockIds, stockId] }
+            : item
+        )
+        // 피드에 없는 새 항목: stockId 태깅 후 추가
+        const existingIds = new Set(updatedFeed.map((f) => f.id))
+        const newItems = items
+          .filter((i) => !existingIds.has(i.id))
+          .map((i) => ({ ...i, relatedStockIds: [stockId] }))
+        return { feed: [...newItems, ...updatedFeed].slice(0, MAX_FEED) }
+      })
+    } else {
+      const items = await getCompanyNews(stockId)
+      if (items.length === 0) return
+      set((s) => {
+        const existingIds = new Set(s.feed.map((i) => i.id))
+        const newItems = items.filter((i) => !existingIds.has(i.id))
+        return { feed: [...newItems, ...s.feed].slice(0, MAX_FEED) }
+      })
+    }
   },
 
   // ── DB 뉴스 로드 ─────────────────────────────────
