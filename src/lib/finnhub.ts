@@ -1,15 +1,17 @@
 // =====================================================
 // Finnhub API 클라이언트 (lib/finnhub.ts)
-// 실제 종목 검색과 회사 정보·현재가를 가져온다.
+// 실제 종목 검색, 현재가, 뉴스를 가져온다.
 // 무료 tier: 분당 60회 호출 가능.
 //
 // 설계:
 //   - searchSymbols: 헤더 검색창 입력 시 종목명·코드 검색
 //   - getStockDetail: 검색 결과 클릭 시 회사 정보와 현재가를 한 번에 가져온다
-//   - 가져온 데이터는 stockStore에 추가되어 이후 로컬 상태로 거래에 활용된다
+//   - getQuote: 단일 종목 실시간 현재가 조회
+//   - getMarketNews: 시장 전반 실제 뉴스 조회
+//   - getCompanyNews: 특정 종목 실제 뉴스 조회
 // =====================================================
 
-import type { Stock } from '../types'
+import type { Stock, NewsItem } from '../types'
 
 const KEY = import.meta.env.VITE_FINNHUB_API_KEY as string
 const BASE = 'https://finnhub.io/api/v1'
@@ -27,6 +29,16 @@ export interface FinnhubSymbol {
 // 접두사 'fh-'를 붙여 로컬 하드코딩 종목(kr-, us-)과 충돌을 방지한다.
 export function symbolToId(symbol: string): string {
   return `fh-${symbol}`
+}
+
+// ── 로컬 종목 ID → Finnhub 심볼 변환 ─────────────────
+// getQuote 등 Finnhub API 호출 시 심볼이 필요하므로 역방향 변환을 제공한다.
+// kr-005930 → 005930.KS, us-AAPL → AAPL, fh-TSMC → TSMC
+export function stockIdToSymbol(id: string): string | null {
+  if (id.startsWith('fh-')) return id.slice(3)
+  if (id.startsWith('kr-')) return `${id.slice(3)}.KS`
+  if (id.startsWith('us-')) return id.slice(3)
+  return null
 }
 
 // ── 로컬 stocks 배열에 이미 있는 종목인지 확인 ──────────
@@ -62,6 +74,27 @@ export async function searchSymbols(query: string): Promise<FinnhubSymbol[]> {
   }
 }
 
+// ── 단일 종목 실시간 현재가 조회 ─────────────────────
+// price가 0이면 데이터 없음(미지원 종목 등)으로 처리해 null을 반환한다.
+export async function getQuote(symbol: string): Promise<{
+  price: number; prevPrice: number; change: number; changePercent: number
+} | null> {
+  if (!KEY) return null
+  try {
+    const res = await fetch(`${BASE}/quote?symbol=${encodeURIComponent(symbol)}&token=${KEY}`)
+    const q = await res.json()
+    if (!q?.c || q.c === 0) return null
+    return {
+      price: q.c,
+      prevPrice: q.pc ?? q.c,
+      change: q.d ?? 0,
+      changePercent: q.dp ?? 0,
+    }
+  } catch {
+    return null
+  }
+}
+
 // ── 회사 정보 + 현재가 조회 ──────────────────────────
 // profile2와 quote를 병렬로 호출해 응답 시간을 줄인다.
 // 가격이 0이거나 회사명이 없으면 null 반환(상장 폐지·미지원 종목 필터링).
@@ -93,5 +126,64 @@ export async function getStockDetail(symbol: string): Promise<Stock | null> {
     }
   } catch {
     return null
+  }
+}
+
+// ── Finnhub 뉴스 기사 내부 타입 ──────────────────────
+interface FinnhubArticle {
+  id: number
+  headline: string
+  summary: string
+  source: string
+  url: string
+  datetime: number // Unix timestamp (초 단위)
+}
+
+// ── Finnhub 기사 → NewsItem 변환 헬퍼 ───────────────
+function articleToNewsItem(article: FinnhubArticle, relatedStockIds: string[]): NewsItem {
+  return {
+    id: `fh-news-${article.id}`,
+    title: article.headline,
+    summary: article.summary || article.headline,
+    url: article.url,
+    source: article.source,
+    relatedStockIds,
+    sentiment: 'NEUTRAL',
+    priceImpact: 0,
+    publishedAt: new Date(article.datetime * 1000).toISOString(),
+  }
+}
+
+// ── 시장 전반 뉴스 조회 ──────────────────────────────
+// Finnhub /news?category=general 최신 30건을 가져온다.
+export async function getMarketNews(): Promise<NewsItem[]> {
+  if (!KEY) return []
+  try {
+    const res = await fetch(`${BASE}/news?category=general&token=${KEY}`)
+    const articles = (await res.json()) as FinnhubArticle[]
+    if (!Array.isArray(articles)) return []
+    return articles.slice(0, 30).map((a) => articleToNewsItem(a, []))
+  } catch {
+    return []
+  }
+}
+
+// ── 특정 종목 뉴스 조회 ─────────────────────────────
+// 지난 7일간 종목 관련 뉴스를 최대 20건 가져온다.
+// stockId를 relatedStockIds에 포함해 종목 상세 페이지 뉴스 필터가 동작하도록 한다.
+export async function getCompanyNews(stockId: string): Promise<NewsItem[]> {
+  const symbol = stockIdToSymbol(stockId)
+  if (!KEY || !symbol) return []
+  try {
+    const to = new Date().toISOString().slice(0, 10)
+    const from = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+    const res = await fetch(
+      `${BASE}/company-news?symbol=${encodeURIComponent(symbol)}&from=${from}&to=${to}&token=${KEY}`
+    )
+    const articles = (await res.json()) as FinnhubArticle[]
+    if (!Array.isArray(articles)) return []
+    return articles.slice(0, 20).map((a) => articleToNewsItem(a, [stockId]))
+  } catch {
+    return []
   }
 }

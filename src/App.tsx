@@ -1,6 +1,11 @@
 // =====================================================
 // 루트 컴포넌트 (App.tsx)
-// 라우팅 구조, 뉴스 피드 초기화, Supabase 세션 복원을 담당한다.
+// 라우팅 구조, Supabase 세션 복원, 실시간 주가·뉴스 동기화를 담당한다.
+//
+// 주요 컴포넌트:
+//   - SessionRestorer: 새로고침 후 로그인 상태를 Supabase 세션에서 복원한다.
+//   - NewsBootstrapAndLiveFeed: 앱 시작 시 Finnhub 실제 뉴스를 로드하고,
+//     2분마다 전체 종목 실시간 가격을 Finnhub /quote로 동기화한다.
 // =====================================================
 
 import { useEffect } from 'react'
@@ -18,10 +23,8 @@ import { useStockStore } from './store/stockStore'
 import { useNewsStore } from './store/newsStore'
 import { useAuthStore } from './store/authStore'
 import { useWatchlistStore } from './store/watchlistStore'
-import { supabase } from './lib/supabaseClient'
-import type { NewsItem } from './types'
 
-const FLUSH_PENDING_NEWS_MS = 10_000
+const REAL_PRICE_SYNC_MS = 2 * 60 * 1000 // 2분마다 실제 가격 동기화
 
 // ── Supabase 세션 복원 컴포넌트 ─────────────────────
 // 앱 시작 시 브라우저에 저장된 Supabase 세션이 있으면 자동으로 로그인 상태를 복원한다.
@@ -48,57 +51,28 @@ function SessionRestorer() {
   return null
 }
 
-// ── 뉴스 부트스트랩 & 리얼타임 수신 컴포넌트 ──────────
-// UI를 렌더링하지 않고 Supabase Realtime 구독 부수 효과만 담당한다.
+// ── 실시간 주가·뉴스 부트스트랩 컴포넌트 ────────────────
+// UI를 렌더링하지 않고 초기 데이터 로드와 주기적 동기화 부수 효과만 담당한다.
 //
-// 변경 이유:
-//   기존 setInterval(pushLive, 5분)은 브라우저 탭이 열려 있을 때만 동작했다.
-//   Supabase pg_cron이 서버에서 5분마다 news 테이블에 insert하고,
-//   여기서는 그 INSERT 이벤트를 Realtime으로 수신해 피드와 시세 충격을 반영한다.
+// - loadMarketNews: 앱 시작 시 Finnhub 실제 뉴스를 가져온다.
+// - syncRealPrices: 2분마다 Finnhub /quote로 전체 종목 실가를 동기화한다.
 function NewsBootstrapAndLiveFeed() {
   useEffect(() => {
-    // 앱 시작 시 mock 뉴스 시세 충격을 즉시 예약한다.
+    // 시뮬레이션 뉴스 시세 충격은 실제 가격을 사용하므로 적용하지 않는다.
     useStockStore.getState().ensureMockNewsImpactsApplied()
 
-    // DB에서 기존 뉴스를 로드한다.
-    useNewsStore.getState().loadFeed()
+    // Finnhub 실제 뉴스를 피드에 로드한다.
+    useNewsStore.getState().loadMarketNews()
 
-    // Supabase Realtime: news 테이블 INSERT 이벤트 구독
-    // pg_cron이 5분마다 generate_news_item()을 호출해 새 행을 삽입하면
-    // 이 핸들러가 즉시 실행되어 피드에 추가하고 시세 충격을 예약한다.
-    const channel = supabase
-      .channel('news-feed')
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'news' },
-        (payload) => {
-          const row = payload.new as Record<string, unknown>
-          const item: NewsItem = {
-            id: row.id as string,
-            title: row.title as string,
-            summary: row.summary as string,
-            url: '#',
-            source: row.source as string,
-            relatedStockIds: (row.related_stock_ids as string[]) ?? [],
-            sentiment: row.sentiment as NewsItem['sentiment'],
-            priceImpact: Number(row.price_impact),
-            publishedAt: row.published_at as string,
-          }
-          useNewsStore.getState().prependItem(item)
-          useStockStore.getState().scheduleDelayedNewsPriceImpact(item)
-        }
-      )
-      .subscribe()
-
-    // 10초마다 만기된 시세 충격을 주가에 반영한다.
-    const flushId = window.setInterval(
-      () => useStockStore.getState().flushDueNewsPriceImpacts(),
-      FLUSH_PENDING_NEWS_MS
+    // 앱 시작 즉시 한 번 실시간 가격을 동기화하고, 이후 2분마다 반복한다.
+    useStockStore.getState().syncRealPrices()
+    const syncId = window.setInterval(
+      () => useStockStore.getState().syncRealPrices(),
+      REAL_PRICE_SYNC_MS
     )
 
     return () => {
-      supabase.removeChannel(channel)
-      window.clearInterval(flushId)
+      window.clearInterval(syncId)
     }
   }, [])
   return null

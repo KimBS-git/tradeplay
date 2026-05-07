@@ -12,9 +12,10 @@
 import { create } from 'zustand'
 import { initialStocks } from '../data/stocks'
 import type { Stock, Holding, Transaction, MarketIndex, NewsItem } from '../types'
-import { accumulateDriftByStock, isNewsActiveForPrice, NEWS_PRICE_EFFECT_DELAY_MS } from '../lib/newsDrift'
+import { isNewsActiveForPrice, NEWS_PRICE_EFFECT_DELAY_MS } from '../lib/newsDrift'
 import { useNewsStore } from './newsStore'
 import { supabase } from '../lib/supabaseClient'
+import { getQuote, stockIdToSymbol } from '../lib/finnhub'
 
 // ── 예약된 뉴스 시세 충격 타입 ────────────────────
 type PendingNewsPriceImpact = {
@@ -58,6 +59,8 @@ interface StockState {
   flushDueNewsPriceImpacts: () => void
   applyNewsImpact: (stockIds: string[], impact: number) => void
   addExternalStock: (stock: Stock) => void
+  syncRealPrices: () => Promise<void>
+  syncStockPrice: (stockId: string) => Promise<void>
   buyStock: (stockId: string, quantity: number) => boolean
   sellStock: (stockId: string, quantity: number) => boolean
   getTotalAsset: () => number
@@ -72,7 +75,7 @@ export const useStockStore = create<StockState>((set, get) => ({
   holdings: [],
   transactions: [],
   cashBalance: INITIAL_CASH,
-  mockNewsImpactsApplied: false,
+  mockNewsImpactsApplied: true,
   pendingNewsPriceImpacts: [],
   marketIndices: [
     { name: 'KOSPI', value: 2748.32, change: 12.45, changePercent: 0.45 },
@@ -154,18 +157,13 @@ export const useStockStore = create<StockState>((set, get) => ({
       pendingNewsPriceImpacts: [],
     }),
 
-  // ── 주가 업데이트 ─────────────────────────────────
-  // 3초마다 호출. 랜덤 변동 + 뉴스 드리프트를 합산해 주가를 갱신한다.
+  // ── 주가 시각적 갱신 ─────────────────────────────
+  // 3초마다 호출. 실제 가격은 syncRealPrices/syncStockPrice가 담당하고
+  // 이 함수는 화면이 정적으로 보이지 않도록 0.3% 이내의 미세 변동만 적용한다.
   updatePrices: () => {
-    get().flushDueNewsPriceImpacts()
-    const driftMap = accumulateDriftByStock(useNewsStore.getState().feed)
     set((state) => ({
       stocks: state.stocks.map((stock) => {
-        const volatility = stock.market === 'KR' ? 0.012 : 0.015
-        const netNewsPct = driftMap[stock.id] ?? 0
-        const normalized = Math.max(-1, Math.min(1, netNewsPct / 8))
-        const newsDrift = normalized * volatility * 0.55
-        const randomChange = (Math.random() - 0.5) * 2 * volatility + newsDrift
+        const randomChange = (Math.random() - 0.5) * 0.006 // ±0.3%
         const newPrice =
           stock.market === 'KR'
             ? Math.round(stock.price * (1 + randomChange))
@@ -175,12 +173,43 @@ export const useStockStore = create<StockState>((set, get) => ({
         return { ...stock, price: newPrice, change, changePercent }
       }),
       marketIndices: state.marketIndices.map((idx) => {
-        const delta = (Math.random() - 0.5) * 0.4
+        const delta = (Math.random() - 0.5) * 0.2
         const newValue = Math.round((idx.value * (1 + delta / 100)) * 100) / 100
         const change = Math.round((newValue - idx.value + idx.change) * 100) / 100
         const changePercent = Math.round((change / (newValue - change)) * 10000) / 100
         return { ...idx, value: newValue, change, changePercent }
       }),
+    }))
+  },
+
+  // ── 전체 종목 실시간 가격 동기화 ─────────────────
+  // 2분마다 호출. 로컬 30개 종목을 순서대로 Finnhub /quote로 조회한다.
+  // 요청 간 200ms 지연으로 분당 60회 무료 제한을 준수한다.
+  syncRealPrices: async () => {
+    const localStocks = get().stocks.filter(
+      (s) => s.id.startsWith('kr-') || s.id.startsWith('us-')
+    )
+    for (const stock of localStocks) {
+      const symbol = stockIdToSymbol(stock.id)
+      if (!symbol) continue
+      const quote = await getQuote(symbol)
+      if (!quote) continue
+      set((state) => ({
+        stocks: state.stocks.map((s) => (s.id === stock.id ? { ...s, ...quote } : s)),
+      }))
+      await new Promise((r) => setTimeout(r, 200))
+    }
+  },
+
+  // ── 단일 종목 실시간 가격 동기화 ─────────────────
+  // 종목 상세 페이지에서 30초마다 호출해 현재 보고 있는 종목의 가격을 갱신한다.
+  syncStockPrice: async (stockId: string) => {
+    const symbol = stockIdToSymbol(stockId)
+    if (!symbol) return
+    const quote = await getQuote(symbol)
+    if (!quote) return
+    set((state) => ({
+      stocks: state.stocks.map((s) => (s.id === stockId ? { ...s, ...quote } : s)),
     }))
   },
 

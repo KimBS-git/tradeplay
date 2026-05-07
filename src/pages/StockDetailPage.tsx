@@ -2,10 +2,18 @@
 // 주식 상세 페이지 (pages/StockDetailPage.tsx)
 // 개별 종목의 상세 정보, 캔들스틱 차트, 주문 패널, 관련 뉴스를 보여준다.
 //
-// 반응형 레이아웃 설계:
+// 종목 로드 방식:
+//   - 로컬 stocks 배열(initialStocks 30개 + 세션 중 추가된 종목)에서 우선 조회한다.
+//   - ID가 'fh-' 접두사인 Finnhub 외부 종목은 스토어에 없으면
+//     Finnhub API(profile2 + quote)를 호출해 동적으로 가져온 뒤 스토어에 추가한다.
+//
+// 실시간 데이터:
+//   - 진입 즉시 syncStockPrice로 현재가를 동기화하고 30초마다 반복한다.
+//   - loadCompanyNews로 해당 종목의 실제 뉴스를 피드에 추가한다.
+//
+// 반응형 레이아웃:
 //   - 데스크탑(lg 이상): 차트와 OrderPanel이 좌우로 나란히 표시된다.
 //   - 모바일(lg 미만): OrderPanel을 숨기고 하단 고정 버튼으로 TradeModal을 연다.
-//   이렇게 하면 모바일 화면이 좁아도 차트가 충분히 크게 표시된다.
 // =====================================================
 
 import { useEffect, useState } from 'react'
@@ -13,6 +21,8 @@ import { useParams, useNavigate } from 'react-router-dom'
 
 // 달러→원화 환산 고정 환율
 const USD_TO_KRW = 1380
+const STOCK_PRICE_SYNC_MS = 30_000 // 30초마다 현재가 동기화
+
 import { useStockStore } from '../store/stockStore'
 import PriceChart from '../components/PriceChart'
 import OrderPanel from '../components/OrderPanel'
@@ -25,8 +35,8 @@ import { getStockDetail } from '../lib/finnhub'
 export default function StockDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { stocks, updatePrices, addExternalStock } = useStockStore()
-  const newsFeed = useNewsStore((s) => s.feed)
+  const { stocks, syncStockPrice, addExternalStock } = useStockStore()
+  const { feed: newsFeed, loadCompanyNews } = useNewsStore()
   const [showTradeModal, setShowTradeModal] = useState(false)
   const [isFetchingExternal, setIsFetchingExternal] = useState(false)
   const [fetchError, setFetchError] = useState(false)
@@ -48,11 +58,19 @@ export default function StockDetailPage() {
     })
   }, [id, stock, addExternalStock, isFetchingExternal])
 
-  // 3초마다 주가 갱신 — PriceChart의 currentPrice prop이 바뀌어 차트가 실시간 업데이트된다
+  // 진입 즉시 현재가를 동기화하고 30초마다 반복한다
   useEffect(() => {
-    const interval = setInterval(updatePrices, 3000)
+    if (!id) return
+    syncStockPrice(id)
+    const interval = setInterval(() => syncStockPrice(id), STOCK_PRICE_SYNC_MS)
     return () => clearInterval(interval)
-  }, [updatePrices])
+  }, [id, syncStockPrice])
+
+  // 종목별 실제 뉴스를 피드에 추가한다
+  useEffect(() => {
+    if (!id) return
+    loadCompanyNews(id)
+  }, [id, loadCompanyNews])
 
   // ── 로딩 / 에러 처리 ─────────────────────────
   if (!stock) {
