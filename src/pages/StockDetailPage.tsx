@@ -99,8 +99,7 @@ export default function StockDetailPage() {
   const sign = isUp ? '+' : ''
   const formatUSD = (p: number) => `$${p.toFixed(2)}`
   const formatKRW = (p: number) => `${Math.round(p).toLocaleString()}원`
-  const formatPrice = (p: number) =>
-    stock.market === 'KR' ? formatKRW(p) : formatUSD(p)
+  const formatPrice = (p: number) => formatKRW(p)
 
   // 현재 종목과 연관된 뉴스만 필터링
   const relatedNews = newsFeed.filter((n) => n.relatedStockIds.includes(stock.id))
@@ -135,15 +134,23 @@ export default function StockDetailPage() {
 
           {/* 현재가 표시 — 미국 주식은 달러 아래 원화 환산액 추가 표시 */}
           <div className="mb-4">
-            <p className="text-3xl font-bold text-gray-900">{formatPrice(stock.price)}</p>
+            <p className="text-3xl font-bold text-gray-900">
+              {stock.market === 'KR'
+                ? formatKRW(stock.price)
+                : formatKRW(stock.price * USD_TO_KRW)}
+            </p>
             {stock.market === 'US' && (
               <p className="text-sm text-gray-400 mt-0.5">
-                ≈ {formatKRW(stock.price * USD_TO_KRW)}
+                {formatUSD(stock.price)}
                 <span className="text-xs ml-1">(₩{USD_TO_KRW}/달러 기준)</span>
               </p>
             )}
             <p className={`text-sm font-medium mt-1 ${priceColor}`}>
-              {sign}{formatPrice(Math.abs(stock.change))} ({sign}{stock.changePercent.toFixed(2)}%)
+              {sign}{
+                stock.market === 'KR'
+                  ? formatKRW(Math.abs(stock.change))
+                  : formatKRW(Math.abs(stock.change) * USD_TO_KRW)
+              } ({sign}{stock.changePercent.toFixed(2)}%)
             </p>
           </div>
 

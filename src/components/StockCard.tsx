@@ -38,16 +38,16 @@ export default function StockCard({ stock }: Props) {
   const navigate = useNavigate()
 
   // ── 가격 표시 분기 ────────────────────────────
-  // 미국 주식은 달러 가격 아래에 원화 환산액을 작게 표시해 국내 투자자가 직관적으로 파악하게 한다.
+  // 원화와 달러를 같이 표기
   const priceDisplay =
     stock.market === 'KR' ? (
       <p className="text-sm font-bold text-gray-900">{stock.price.toLocaleString()}원</p>
     ) : (
       <div>
-        <p className="text-sm font-bold text-gray-900">${stock.price.toFixed(2)}</p>
-        <p className="text-xs text-gray-400">
+        <p className="text-sm font-bold text-gray-900">
           {Math.round(stock.price * USD_TO_KRW).toLocaleString()}원
         </p>
+        <p className="text-xs text-gray-400">${stock.price.toFixed(2)}</p>
       </div>
     )
 

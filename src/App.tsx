@@ -61,8 +61,12 @@ function NewsBootstrapAndLiveFeed() {
     // 시뮬레이션 뉴스 시세 충격은 실제 가격을 사용하므로 적용하지 않는다.
     useStockStore.getState().ensureMockNewsImpactsApplied()
 
-    // Finnhub 실제 뉴스를 피드에 로드한다.
-    useNewsStore.getState().loadMarketNews()
+    // 한국어 뉴스는 네이버 뉴스 API(프록시)로 로드한다.
+    // (Finnhub 시장 뉴스는 기본 비활성화 — 영문 위주라 UX가 섞일 수 있음)
+    useNewsStore.getState().loadKoreanMarketNews('증시')
+
+    // KR은 기준가(시가/전일종가)로 고정하고, US만 2분마다 실시간 동기화한다.
+    useStockStore.getState().syncKRBaselines()
 
     // 앱 시작 즉시 한 번 실시간 가격을 동기화하고, 이후 2분마다 반복한다.
     useStockStore.getState().syncRealPrices()

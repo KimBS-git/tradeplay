@@ -14,21 +14,12 @@
 
 import { create } from 'zustand'
 import type { NewsItem } from '../types'
-import { mockNews } from '../data/news'
 import { supabase } from '../lib/supabaseClient'
 import { getMarketNews, getCompanyNews } from '../lib/finnhub'
+import { getKoreanMarketNews } from '../lib/naverNews'
 
 // 피드 최대 보관 건수 — 초과 시 오래된 항목을 잘라낸다.
 const MAX_FEED = 120
-
-// ── 초기 피드 ────────────────────────────────────
-// mock 뉴스를 최신 순으로 정렬해 DB 뉴스가 로드되기 전에도
-// 빈 화면이 보이지 않도록 한다.
-function initialFeed(): NewsItem[] {
-  return [...mockNews].sort(
-    (a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
-  )
-}
 
 // ── DB 행 → NewsItem 변환 ──────────────────────────
 // Supabase에서 받은 snake_case 행을 camelCase NewsItem으로 매핑한다.
@@ -50,6 +41,8 @@ interface NewsStoreState {
   feed: NewsItem[]
   /** Finnhub 시장 전반 뉴스를 가져와 피드 앞에 병합한다 */
   loadMarketNews: () => Promise<void>
+  /** Naver(한국어) 뉴스 검색 결과를 가져와 피드 앞에 병합한다 */
+  loadKoreanMarketNews: (query?: string) => Promise<void>
   /** 종목 상세 페이지 진입 시 해당 종목의 실제 뉴스를 가져온다 */
   loadCompanyNews: (stockId: string) => Promise<void>
   /** Supabase DB에서 최신 뉴스를 불러와 피드 앞에 병합한다 (폴백용) */
@@ -59,12 +52,23 @@ interface NewsStoreState {
 }
 
 export const useNewsStore = create<NewsStoreState>((set) => ({
-  feed: initialFeed(),
+  feed: [],
 
   // ── Finnhub 시장 뉴스 로드 ───────────────────────
   // 앱 시작 시 호출. 실제 시장 뉴스를 가져와 mock 뉴스 앞에 병합한다.
   loadMarketNews: async () => {
     const items = await getMarketNews()
+    if (items.length === 0) return
+    set((s) => {
+      const existingIds = new Set(s.feed.map((i) => i.id))
+      const newItems = items.filter((i) => !existingIds.has(i.id))
+      return { feed: [...newItems, ...s.feed].slice(0, MAX_FEED) }
+    })
+  },
+
+  // ── Naver(한국어) 시장 뉴스 로드 ───────────────────
+  loadKoreanMarketNews: async (query = '증시') => {
+    const items = await getKoreanMarketNews(query)
     if (items.length === 0) return
     set((s) => {
       const existingIds = new Set(s.feed.map((i) => i.id))

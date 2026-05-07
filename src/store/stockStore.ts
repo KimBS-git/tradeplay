@@ -15,7 +15,7 @@ import type { Stock, Holding, Transaction, MarketIndex, NewsItem } from '../type
 import { isNewsActiveForPrice, NEWS_PRICE_EFFECT_DELAY_MS } from '../lib/newsDrift'
 import { useNewsStore } from './newsStore'
 import { supabase } from '../lib/supabaseClient'
-import { getQuote, stockIdToSymbol } from '../lib/finnhub'
+import { getQuote, getKRBaseline, stockIdToSymbol } from '../lib/finnhub'
 
 // ── 예약된 뉴스 시세 충격 타입 ────────────────────
 type PendingNewsPriceImpact = {
@@ -60,6 +60,7 @@ interface StockState {
   applyNewsImpact: (stockIds: string[], impact: number) => void
   addExternalStock: (stock: Stock) => void
   syncRealPrices: () => Promise<void>
+  syncKRBaselines: () => Promise<void>
   syncStockPrice: (stockId: string) => Promise<void>
   buyStock: (stockId: string, quantity: number) => boolean
   sellStock: (stockId: string, quantity: number) => boolean
@@ -163,6 +164,8 @@ export const useStockStore = create<StockState>((set, get) => ({
   updatePrices: () => {
     set((state) => ({
       stocks: state.stocks.map((stock) => {
+        // KR은 랜덤 변동을 제거하고 "고정 기준가"를 유지한다.
+        if (stock.market === 'KR') return stock
         const randomChange = (Math.random() - 0.5) * 0.006 // ±0.3%
         const newPrice =
           stock.market === 'KR'
@@ -183,21 +186,43 @@ export const useStockStore = create<StockState>((set, get) => ({
   },
 
   // ── 전체 종목 실시간 가격 동기화 ─────────────────
-  // 2분마다 호출. 로컬 30개 종목을 순서대로 Finnhub /quote로 조회한다.
-  // 요청 간 200ms 지연으로 분당 60회 무료 제한을 준수한다.
+  // 2분마다 호출. US 종목만 Finnhub으로 갱신한다. (KR은 기준가 고정)
+  // 요청 간 150ms 지연으로 API 제한을 준수한다.
   syncRealPrices: async () => {
     const localStocks = get().stocks.filter(
       (s) => s.id.startsWith('kr-') || s.id.startsWith('us-')
     )
     for (const stock of localStocks) {
+      if (stock.market === 'KR') continue
       const symbol = stockIdToSymbol(stock.id)
       if (!symbol) continue
-      const quote = await getQuote(symbol)
+      const quote = await getQuote(symbol) // Finnhub
       if (!quote) continue
       set((state) => ({
         stocks: state.stocks.map((s) => (s.id === stock.id ? { ...s, ...quote } : s)),
       }))
-      await new Promise((r) => setTimeout(r, 200))
+      await new Promise((r) => setTimeout(r, 150))
+    }
+  },
+
+  // ── KR 종목 기준가 1회 동기화(고정) ───────────────
+  // 앱 시작 시 1회 호출해 "당일 시가(없으면 전일 종가)"로 가격을 고정한다.
+  syncKRBaselines: async () => {
+    const krStocks = get().stocks.filter((s) => s.market === 'KR' && s.id.startsWith('kr-'))
+    for (const stock of krStocks) {
+      const symbol = stockIdToSymbol(stock.id)
+      if (!symbol) continue
+      const baseline = await getKRBaseline(symbol)
+      if (!baseline) continue
+      const price = baseline
+      set((state) => ({
+        stocks: state.stocks.map((s) =>
+          s.id === stock.id
+            ? { ...s, price, prevPrice: price, change: 0, changePercent: 0 }
+            : s
+        ),
+      }))
+      await new Promise((r) => setTimeout(r, 150))
     }
   },
 
@@ -206,11 +231,11 @@ export const useStockStore = create<StockState>((set, get) => ({
   syncStockPrice: async (stockId: string) => {
     const symbol = stockIdToSymbol(stockId)
     if (!symbol) return
+    const stock = get().stocks.find((s) => s.id === stockId)
+    if (stock?.market === 'KR') return // KR은 기준가 고정
     const quote = await getQuote(symbol)
     if (!quote) return
-    set((state) => ({
-      stocks: state.stocks.map((s) => (s.id === stockId ? { ...s, ...quote } : s)),
-    }))
+    set((state) => ({ stocks: state.stocks.map((s) => (s.id === stockId ? { ...s, ...quote } : s)) }))
   },
 
   // ── 초기 mock 뉴스 시세 충격 일괄 적용 ───────────

@@ -74,7 +74,7 @@ export async function searchSymbols(query: string): Promise<FinnhubSymbol[]> {
   }
 }
 
-// ── 단일 종목 실시간 현재가 조회 ─────────────────────
+// ── Finnhub 미국 종목 현재가 조회 ────────────────────
 // price가 0이면 데이터 없음(미지원 종목 등)으로 처리해 null을 반환한다.
 export async function getQuote(symbol: string): Promise<{
   price: number; prevPrice: number; change: number; changePercent: number
@@ -90,6 +90,51 @@ export async function getQuote(symbol: string): Promise<{
       change: q.d ?? 0,
       changePercent: q.dp ?? 0,
     }
+  } catch {
+    return null
+  }
+}
+
+// ── Yahoo Finance 한국 종목 시세 조회 ─────────────────
+// Finnhub 무료 플랜은 KOSPI 실시간 데이터를 지원하지 않으므로
+// Yahoo Finance 비공식 API를 사용한다 (API 키 불필요, 지연 시세 제공).
+// symbol 형식: '005930.KS', '000660.KS' 등
+export async function getKRQuote(symbol: string): Promise<{
+  price: number; prevPrice: number; change: number; changePercent: number
+} | null> {
+  try {
+    const res = await fetch(
+      `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`,
+      { headers: { Accept: 'application/json' } }
+    )
+    const data = await res.json()
+    const meta = data?.chart?.result?.[0]?.meta
+    if (!meta?.regularMarketPrice) return null
+    return {
+      price: meta.regularMarketPrice,
+      prevPrice: meta.previousClose ?? meta.regularMarketPrice,
+      change: meta.regularMarketChange ?? 0,
+      changePercent: meta.regularMarketChangePercent ?? 0,
+    }
+  } catch {
+    return null
+  }
+}
+
+// ── Yahoo Finance 한국 종목 기준가 조회(고정용) ─────────
+// "실시간 무료"가 어려울 때, 당일 시가(없으면 전일 종가)를 기준가로 사용한다.
+export async function getKRBaseline(symbol: string): Promise<number | null> {
+  try {
+    const res = await fetch(
+      `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`,
+      { headers: { Accept: 'application/json' } }
+    )
+    const data = await res.json()
+    const meta = data?.chart?.result?.[0]?.meta
+    const prevClose = meta?.previousClose
+    // 요청: KR은 전일 종가로 고정
+    if (!prevClose || Number(prevClose) === 0) return null
+    return Number(prevClose)
   } catch {
     return null
   }
