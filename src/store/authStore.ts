@@ -96,20 +96,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   // ── 회원가입 ────────────────────────────────────────
-  // 1) 아이디(username) 중복 확인
-  // 2) Supabase Auth signUp
-  // 3) profiles 테이블에 사용자 정보 삽입
+  // 1) Supabase Auth signUp 시도 (이메일 중복은 여기서 검출)
+  // 2) profiles 테이블에 사용자 정보 삽입 (username UNIQUE 충돌 시 중복으로 처리)
   signup: async (username, password, name) => {
     set({ isLoading: true })
-
-    // 아이디 중복 확인
-    // profiles 테이블은 RLS로 비로그인 상태에서 직접 조회가 불가하므로
-    // security definer 함수를 통해 RLS 없이 username 존재 여부만 확인한다.
-    const { data: taken } = await supabase.rpc('is_username_taken', { p_username: username })
-    if (taken) {
-      set({ isLoading: false })
-      return false
-    }
 
     const { data, error } = await supabase.auth.signUp({
       email: toEmail(username),
@@ -130,6 +120,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     })
 
     if (profileError) {
+      // username UNIQUE 충돌(23505) 등은 모두 중복 가입 실패로 처리한다.
       set({ isLoading: false })
       return false
     }

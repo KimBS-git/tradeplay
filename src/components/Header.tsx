@@ -4,7 +4,7 @@
 // sticky 포지셔닝으로 스크롤해도 항상 화면 상단에 유지된다.
 // =====================================================
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 
@@ -22,23 +22,6 @@ export default function Header() {
   const navigate = useNavigate()
   const { currentUser, logout } = useAuthStore()
   const [query, setQuery] = useState('')
-  const [now, setNow] = useState(() => new Date())
-
-  useEffect(() => {
-    const id = window.setInterval(() => setNow(new Date()), 1000)
-    return () => window.clearInterval(id)
-  }, [])
-
-  const nowStr = new Intl.DateTimeFormat('ko-KR', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    weekday: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  }).format(now)
 
   // ── 검색 핸들러 ───────────────────────────────
   // 검색어를 URL 쿼리 파라미터로 인코딩해 /search 페이지로 이동한다.
@@ -141,17 +124,12 @@ export default function Header() {
               </button>
             </div>
           ) : (
-            <div className="flex flex-col items-end -my-1">
-              <Link
-                to="/login"
-                className="px-4 py-1.5 text-sm font-medium text-white bg-blue-600 rounded-full hover:bg-blue-700 transition"
-              >
-                로그인
-              </Link>
-              <span className="mt-1 text-[11px] leading-none text-gray-400">
-                {nowStr}
-              </span>
-            </div>
+            <Link
+              to="/login"
+              className="px-4 py-1.5 text-sm font-medium text-white bg-blue-600 rounded-full hover:bg-blue-700 transition"
+            >
+              로그인
+            </Link>
           )}
         </div>
       </div>

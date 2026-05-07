@@ -65,18 +65,21 @@ function NewsBootstrapAndLiveFeed() {
     // (Finnhub 시장 뉴스는 기본 비활성화 — 영문 위주라 UX가 섞일 수 있음)
     useNewsStore.getState().loadKoreanMarketNews('증시')
 
-    // KR은 기준가(시가/전일종가)로 고정하고, US만 2분마다 실시간 동기화한다.
-    useStockStore.getState().syncKRBaselines()
-
-    // 앱 시작 즉시 한 번 실시간 가격을 동기화하고, 이후 2분마다 반복한다.
-    useStockStore.getState().syncRealPrices()
-    const syncId = window.setInterval(
+    // 앱 시작 즉시 한 번 실시간 가격(US/KR)을 동기화하고, 이후 2분마다 반복한다.
+    useStockStore.getState().syncKRBaselines() // KR: 하이브리드(현재가 → 시가 → 전일종가)
+    useStockStore.getState().syncRealPrices()  // US: Finnhub /quote
+    const usSyncId = window.setInterval(
       () => useStockStore.getState().syncRealPrices(),
+      REAL_PRICE_SYNC_MS
+    )
+    const krSyncId = window.setInterval(
+      () => useStockStore.getState().syncKRBaselines(),
       REAL_PRICE_SYNC_MS
     )
 
     return () => {
-      window.clearInterval(syncId)
+      window.clearInterval(usSyncId)
+      window.clearInterval(krSyncId)
     }
   }, [])
   return null

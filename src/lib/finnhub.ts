@@ -121,32 +121,41 @@ export async function getKRQuote(symbol: string): Promise<{
   }
 }
 
-// ── Yahoo Finance 한국 종목 기준가 조회(고정용) ─────────
-// "실시간 무료"가 어려울 때, 당일 시가(없으면 전일 종가)를 기준가로 사용한다.
-export async function getKRPrevCloses(symbol: string): Promise<{ close: number; prevClose: number | null } | null> {
+// ── Yahoo Finance 한국 종목 스냅샷 조회 ─────────────────
+// 하이브리드 가격 적용용: 현재가(regularMarketPrice) 우선,
+// 폴백으로 당일 시가(regularMarketOpen) → 전일 종가(previousClose/close) 순.
+// 등락은 항상 전일 종가(prevClose) 기준으로 계산한다.
+export async function getKRSnapshot(symbol: string): Promise<{
+  close: number
+  prevClose: number | null
+  regularMarketPrice: number | null
+  regularMarketOpen: number | null
+  previousCloseMeta: number | null
+} | null> {
   try {
-    const res = await fetch(
-      `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=5d`,
-      { headers: { Accept: 'application/json' } }
-    )
-    const data = await res.json()
-    const result = data?.chart?.result?.[0]
-    const closes: unknown[] = result?.indicators?.quote?.[0]?.close ?? []
-    if (!Array.isArray(closes) || closes.length === 0) return null
-
-    // 뒤에서부터 유효한 종가 2개(전일, 전전일)를 찾는다.
-    const valid: number[] = []
-    for (let i = closes.length - 1; i >= 0; i--) {
-      const v = closes[i]
-      const n = typeof v === 'number' ? v : Number(v)
-      if (!Number.isFinite(n) || n === 0) continue
-      valid.push(n)
-      if (valid.length >= 2) break
+    // 배포 환경(Vercel)에서 Yahoo 직접 호출은 CORS로 실패할 수 있어
+    // 서버(/api)에서 프록시한 엔드포인트를 통해 가져온다.
+    const res = await fetch(`/api/kr-prev-closes?symbol=${encodeURIComponent(symbol)}`)
+    if (!res.ok) return null
+    const data = (await res.json()) as {
+      close?: number
+      prevClose?: number | null
+      regularMarketPrice?: number | null
+      regularMarketOpen?: number | null
+      previousCloseMeta?: number | null
     }
-    if (valid.length === 0) return null
-
-    // valid[0] = 가장 최근 종가(전일), valid[1] = 전전일 종가(없을 수도)
-    return { close: valid[0], prevClose: valid[1] ?? null }
+    if (!data?.close || !Number.isFinite(Number(data.close))) return null
+    const num = (v: unknown) => {
+      const n = Number(v)
+      return Number.isFinite(n) && n > 0 ? n : null
+    }
+    return {
+      close: Number(data.close),
+      prevClose: data.prevClose == null ? null : Number(data.prevClose),
+      regularMarketPrice: num(data.regularMarketPrice),
+      regularMarketOpen: num(data.regularMarketOpen),
+      previousCloseMeta: num(data.previousCloseMeta),
+    }
   } catch {
     return null
   }

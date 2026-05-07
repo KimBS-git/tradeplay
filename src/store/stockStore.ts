@@ -15,7 +15,7 @@ import type { Stock, Holding, Transaction, MarketIndex, NewsItem } from '../type
 import { isNewsActiveForPrice, NEWS_PRICE_EFFECT_DELAY_MS } from '../lib/newsDrift'
 import { useNewsStore } from './newsStore'
 import { supabase } from '../lib/supabaseClient'
-import { getQuote, getKRPrevCloses, stockIdToSymbol } from '../lib/finnhub'
+import { getQuote, getKRSnapshot, stockIdToSymbol } from '../lib/finnhub'
 
 // ── 예약된 뉴스 시세 충격 타입 ────────────────────
 type PendingNewsPriceImpact = {
@@ -202,17 +202,22 @@ export const useStockStore = create<StockState>((set, get) => ({
     }
   },
 
-  // ── KR 종목 기준가 1회 동기화(고정) ───────────────
-  // 앱 시작 시 1회 호출해 "당일 시가(없으면 전일 종가)"로 가격을 고정한다.
+  // ── KR 종목 가격 동기화(하이브리드) ───────────────
+  // 우선순위: regularMarketPrice(현재가) → regularMarketOpen(당일 시가) → 전일 종가
+  // 등락은 항상 "전일 종가(prevClose)" 대비로 계산해 색/지표가 일관되게 한다.
+  // 앱 시작 시 1회 + 이후 인터벌(120s)에서 반복 호출되어 준실시간으로 갱신된다.
   syncKRBaselines: async () => {
     const krStocks = get().stocks.filter((s) => s.market === 'KR' && s.id.startsWith('kr-'))
     for (const stock of krStocks) {
       const symbol = stockIdToSymbol(stock.id)
       if (!symbol) continue
-      const closes = await getKRPrevCloses(symbol)
-      if (!closes?.close) continue
-      const price = closes.close
-      const prevPrice = closes.prevClose ?? closes.close
+      const snap = await getKRSnapshot(symbol)
+      if (!snap) continue
+
+      // 등락 기준: 메타의 previousClose가 있으면 그걸 우선, 없으면 차트의 전전일 종가
+      const prevPrice = snap.previousCloseMeta ?? snap.prevClose ?? snap.close
+      // 표시 가격: 현재가 → 시가 → 전일 종가 순
+      const price = snap.regularMarketPrice ?? snap.regularMarketOpen ?? snap.close
       const change = price - prevPrice
       const changePercent = prevPrice ? (change / prevPrice) * 100 : 0
       set((state) => ({

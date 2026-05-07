@@ -7,7 +7,7 @@
 // (다른 페이지에서도 동일 패턴을 사용한다.)
 // =====================================================
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStockStore } from '../store/stockStore'
 import MarketIndex from '../components/MarketIndex'
@@ -29,6 +29,23 @@ export default function HomePage() {
   const newsFeed = useNewsStore((s) => s.feed)
   const navigate = useNavigate()
   const [marketTab, setMarketTab] = useState<MarketTab>('ALL')
+  const [now, setNow] = useState(() => new Date())
+
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(new Date()), 1000)
+    return () => window.clearInterval(id)
+  }, [])
+
+  const nowStr = new Intl.DateTimeFormat('ko-KR', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    weekday: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).format(now)
 
   // ── 종목 필터링 및 TOP5 정렬 ──────────────────
   // 탭에 따라 전체/국내/미국 종목을 걸러낸 뒤 변동률 기준으로 정렬한다.
@@ -44,7 +61,10 @@ export default function HomePage() {
 
       {/* ── 시장 현황 (시장 지수 카드) ────────────── */}
       <section>
-        <h2 className="text-base font-bold text-gray-900 mb-3">시장 현황</h2>
+        <div className="flex items-end justify-between mb-3">
+          <h2 className="text-base font-bold text-gray-900">시장 현황</h2>
+          <span className="text-xs text-gray-400">{nowStr}</span>
+        </div>
         <MarketIndex />
       </section>
 
