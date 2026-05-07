@@ -47,7 +47,7 @@ export default function AdminPage() {
 
   const handleLogout = async () => {
     await logout()
-    navigate('/login')
+    navigate('/', { replace: true })
   }
 
   const normalUsers = users.filter((u) => !u.isAdmin)

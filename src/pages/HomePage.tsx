@@ -16,10 +16,9 @@ import NewsCard from '../components/NewsCard'
 import { useNewsStore } from '../store/newsStore'
 
 // 시장 필터 탭 타입
-type MarketTab = 'ALL' | 'KR' | 'US'
+type MarketTab = 'KR' | 'US'
 
 const TAB_LABELS: { value: MarketTab; label: string }[] = [
-  { value: 'ALL', label: '전체' },
   { value: 'KR', label: '🇰🇷 국내' },
   { value: 'US', label: '🇺🇸 미국' },
 ]
@@ -28,7 +27,7 @@ export default function HomePage() {
   const { stocks } = useStockStore()
   const newsFeed = useNewsStore((s) => s.feed)
   const navigate = useNavigate()
-  const [marketTab, setMarketTab] = useState<MarketTab>('ALL')
+  const [marketTab, setMarketTab] = useState<MarketTab>('KR')
   const [now, setNow] = useState(() => new Date())
 
   useEffect(() => {
@@ -48,8 +47,8 @@ export default function HomePage() {
   }).format(now)
 
   // ── 종목 필터링 및 TOP5 정렬 ──────────────────
-  // 탭에 따라 전체/국내/미국 종목을 걸러낸 뒤 변동률 기준으로 정렬한다.
-  const filtered = marketTab === 'ALL' ? stocks : stocks.filter((s) => s.market === marketTab)
+  // 탭에 따라 국내/미국 종목을 걸러낸 뒤 변동률 기준으로 정렬한다.
+  const filtered = stocks.filter((s) => s.market === marketTab)
   const topGainers = [...filtered].sort((a, b) => b.changePercent - a.changePercent).slice(0, 5)
   const topLosers = [...filtered].sort((a, b) => a.changePercent - b.changePercent).slice(0, 5)
 
@@ -73,7 +72,7 @@ export default function HomePage() {
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-base font-bold text-gray-900">종목 현황</h2>
 
-          {/* 국내·미국·전체 필터 토글 */}
+          {/* 국내·미국 필터 토글 */}
           <div className="flex bg-gray-100 rounded-xl p-0.5 gap-0.5">
             {TAB_LABELS.map(({ value, label }) => (
               <button
