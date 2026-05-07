@@ -1,10 +1,10 @@
 // =====================================================
 // 뉴스 페이지 (pages/NewsPage.tsx)
 // 전체 뉴스 피드를 시간 역순으로 나열하는 페이지.
-// newsStore에서 feed를 구독해 합성 뉴스가 추가될 때 자동으로 갱신된다.
+// newsStore에서 feed를 구독해 뉴스가 추가될 때 자동으로 갱신된다.
 //
 // 별도 갱신 interval이 없는 이유:
-//   뉴스 생성은 App.tsx의 NewsBootstrapAndLiveFeed가 담당하므로
+//   뉴스 로드는 App.tsx의 NewsBootstrapAndLiveFeed가 담당하므로
 //   이 페이지는 store 구독만으로 충분하다.
 // =====================================================
 
@@ -32,7 +32,7 @@ export default function NewsPage() {
         ))}
       </div>
 
-      {/* 피드가 비어 있을 때 안내 (실제로는 초기 mock 뉴스가 항상 있어 표시되지 않음) */}
+      {/* 피드가 비어 있을 때 안내 */}
       {feed.length === 0 && (
         <div className="text-center py-12 text-sm text-gray-400">뉴스가 없습니다.</div>
       )}

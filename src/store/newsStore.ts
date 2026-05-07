@@ -3,9 +3,9 @@
 // 뉴스 피드 상태를 관리하는 Zustand 스토어.
 //
 // 뉴스 출처:
-//   - loadMarketNews: Finnhub /news?category=general 에서 실제 시장 뉴스를 가져온다.
+//   - loadKoreanMarketNews: Naver 검색 API에서 한국어 시장 뉴스를 가져온다.
+//   - loadMarketNews: Finnhub /news?category=general 에서 글로벌 시장 뉴스를 가져온다.
 //   - loadCompanyNews: 종목 상세 페이지에서 Finnhub /company-news로 종목별 뉴스를 가져온다.
-//   - 기존 Supabase pg_cron 시뮬레이션 뉴스 대신 실제 뉴스를 사용한다.
 //
 // 흐름:
 //   1. App.tsx 마운트 시 loadMarketNews()로 최신 30건을 가져온다.
@@ -55,7 +55,7 @@ export const useNewsStore = create<NewsStoreState>((set) => ({
   feed: [],
 
   // ── Finnhub 시장 뉴스 로드 ───────────────────────
-  // 앱 시작 시 호출. 실제 시장 뉴스를 가져와 mock 뉴스 앞에 병합한다.
+  // 피드에 없는 뉴스만 필터링해 앞에 병합한다. 중복 ID는 Set으로 차단한다.
   loadMarketNews: async () => {
     const items = await getMarketNews()
     if (items.length === 0) return
@@ -90,8 +90,8 @@ export const useNewsStore = create<NewsStoreState>((set) => ({
   },
 
   // ── DB 뉴스 로드 ─────────────────────────────────
-  // 최신 120건을 published_at 내림차순으로 가져와 mock 뉴스 앞에 삽입한다.
-  // 중복 ID는 Set으로 필터링해 mock 뉴스와 DB 뉴스가 겹치지 않게 한다.
+  // 최신 120건을 published_at 내림차순으로 가져와 피드 앞에 병합한다.
+  // 중복 ID는 Set으로 필터링해 기존 피드와 겹치지 않게 한다.
   loadFeed: async () => {
     const { data } = await supabase
       .from('news')

@@ -47,8 +47,7 @@ my-app/
 │   │   ├── naverNews.ts            # Naver 뉴스 API 호출
 │   │   ├── newsDrift.ts            # 뉴스 감성 → 주가 반영 로직
 │   │   ├── supabaseClient.ts       # Supabase 초기화
-│   │   ├── fx.ts                   # USD/KRW 환율 조회
-│   │   └── generateSyntheticNews.ts
+│   │   └── fx.ts                   # USD/KRW 환율 조회
 │   │
 │   ├── hooks/
 │   │   └── useUsdKrw.ts            # 환율 커스텀 훅
@@ -57,8 +56,7 @@ my-app/
 │   │   └── index.ts                # 전역 TypeScript 타입 정의
 │   │
 │   ├── data/
-│   │   ├── stocks.ts               # 초기 30개 종목 시드 데이터 (KR + US)
-│   │   └── news.ts
+│   │   └── stocks.ts               # 초기 30개 종목 시드 데이터 (KR + US)
 │   │
 │   ├── App.tsx                     # 라우터 및 앱 초기화
 │   └── main.tsx
@@ -189,7 +187,7 @@ const topLosers  = [...filtered].sort((a, b) => a.changePercent - b.changePercen
 changePercent = (현재가 - 전일종가) / 전일종가 × 100
 ```
 - 전일종가(`previousClose`)는 API 동기화 시 확정값으로 저장
-- 이후 3초 인터벌 시뮬레이션으로 현재가만 변동 → 등락률 실시간 반영
+- 2분마다 API 재동기화로 현재가 갱신 → 등락률 실시간 반영
 
 **UI 표현 (StockCard.tsx)**:
 - 상승: 빨간색 텍스트, `+N.NN%`
@@ -267,10 +265,16 @@ AdminPage
 
 ### 포트폴리오 계산 (AccountPage)
 ```
-총 자산    = 현금 잔고 + Σ(보유 수량 × 현재 시세)
-평가 손익  = Σ(보유 수량 × (현재 시세 − 평균 매수가))
-수익률(%)  = 평가 손익 / 총 매수 금액 × 100
+총 자산    = 현금 잔고 + Σ(보유 수량 × 현재 시세 원화 환산)
+평가 손익  = Σ(보유 수량 × (현재 시세 − 평균 매수가)) — 원화 기준
+수익률(%)  = (총 자산 − 초기 시드머니 1,000만원) / 1,000만원 × 100
 ```
+- 미국 주식 현재가·평균단가는 `useUsdKrw` 환율로 원화 환산 후 계산
+
+### 거래 시간 제한 (OrderPanel)
+- **국내 주식**: 평일 09:00 ~ 16:00 KST에만 매수·매도 가능 (장 외 시간 버튼 비활성화 + 배너 표시)
+- **미국 주식**: 거래 시간 제한 없음
+- **잔액 초과 방지**: 주문금액(원화 기준)이 잔액 초과 시 버튼 비활성화, `+` 버튼도 최대 수량에서 자동 정지
 
 ### 인증 구조
 - 이메일 포맷: `{username}@tradeplay.local` (외부 노출 없이 내부 처리)

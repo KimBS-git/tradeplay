@@ -25,7 +25,7 @@ export interface Stock {
 // ── 뉴스 아이템 ────────────────────────────────────
 // 뉴스 피드에 표시되는 개별 기사 구조.
 // sentiment와 priceImpact를 함께 저장해, 뉴스가 주가에 미치는 영향을
-// 게시 후 30분이 지난 시점에 자동 반영하는 '지연 반영' 로직에 활용한다.
+// 게시 후 10분이 지난 시점에 자동 반영하는 '지연 반영' 로직에 활용한다.
 export interface NewsItem {
   id: string
   title: string
@@ -60,7 +60,7 @@ export interface Transaction {
   type: 'BUY' | 'SELL'
   quantity: number
   price: number        // 체결 당시 단가
-  totalAmount: number  // 체결 총액 (price × quantity)
+  totalAmount: number  // 체결 총액 (원화 기준 — 국내주식은 price × quantity, 미국주식은 price × quantity × 환율)
   createdAt: string    // ISO 8601 체결 시각
 }
 

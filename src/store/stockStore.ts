@@ -133,8 +133,6 @@ export const useStockStore = create<StockState>((set, get) => ({
 
   // ── 외부 종목 추가 (Finnhub 검색 결과) ──────────────
   // 로컬 상태에 추가하고, Supabase stocks 테이블에도 upsert한다.
-  // pg_cron의 generate_news_item()이 테이블을 읽으므로
-  // 다음 실행부터 이 종목도 뉴스 생성 대상에 포함된다.
   addExternalStock: (stock: Stock) => {
     set((state) => {
       if (state.stocks.find((s) => s.id === stock.id)) return state

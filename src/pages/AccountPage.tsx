@@ -7,6 +7,7 @@
 import { useNavigate } from 'react-router-dom'
 import { useStockStore } from '../store/stockStore'
 import { useAuthStore } from '../store/authStore'
+import { useUsdKrw } from '../hooks/useUsdKrw'
 
 // ── 금액 포맷 헬퍼 ───────────────────────────────
 // 양수면 '+' 접두사를 붙이고, 원 단위로 표시한다.
@@ -20,6 +21,7 @@ export default function AccountPage() {
   const { stocks, holdings, transactions, cashBalance, getTotalAsset, getTotalPnl } =
     useStockStore()
   const navigate = useNavigate()
+  const { rate: USD_TO_KRW } = useUsdKrw()
 
   // ── 비로그인 처리 ────────────────────────────
   if (!user) {
@@ -85,8 +87,12 @@ export default function AccountPage() {
             {holdings.map((holding) => {
               const stock = stocks.find((s) => s.id === holding.stockId)
               if (!stock) return null
-              const pnl = (stock.price - holding.averagePrice) * holding.quantity
-              const pnlRate = ((stock.price - holding.averagePrice) / holding.averagePrice) * 100
+              const toKrw = (p: number) => stock.market === 'US' ? p * USD_TO_KRW : p
+              const avgKrw = toKrw(holding.averagePrice)
+              const priceKrw = toKrw(stock.price)
+              const valuationKrw = Math.round(priceKrw * holding.quantity)
+              const pnl = (priceKrw - avgKrw) * holding.quantity
+              const pnlRate = ((priceKrw - avgKrw) / avgKrw) * 100
               const isUp = pnl >= 0
               return (
                 <div
@@ -99,18 +105,20 @@ export default function AccountPage() {
                     <p className="text-sm font-semibold text-gray-900">{holding.stockName}</p>
                     <p className="text-xs text-gray-400">
                       {holding.quantity}주 · 평균{' '}
-                      {holding.market === 'KR'
-                        ? holding.averagePrice.toLocaleString() + '원'
-                        : '$' + holding.averagePrice.toFixed(2)}
+                      {Math.round(avgKrw).toLocaleString()}원
+                      {holding.market === 'US' && (
+                        <span className="ml-1 text-gray-300">(${holding.averagePrice.toFixed(2)})</span>
+                      )}
                     </p>
                   </div>
                   {/* 우측: 평가금액 + 손익 */}
                   <div className="text-right">
                     <p className="text-sm font-bold text-gray-900">
-                      {holding.market === 'KR'
-                        ? (stock.price * holding.quantity).toLocaleString() + '원'
-                        : '$' + (stock.price * holding.quantity).toFixed(2)}
+                      {valuationKrw.toLocaleString()}원
                     </p>
+                    {holding.market === 'US' && (
+                      <p className="text-xs text-gray-400">(${(stock.price * holding.quantity).toFixed(2)})</p>
+                    )}
                     <p className={`text-xs font-medium ${isUp ? 'text-red-500' : 'text-blue-600'}`}>
                       {isUp ? '+' : ''}{Math.round(pnl).toLocaleString()}원 ({isUp ? '+' : ''}{pnlRate.toFixed(2)}%)
                     </p>
@@ -149,9 +157,7 @@ export default function AccountPage() {
                 </div>
                 <div className="text-right">
                   <p className="text-sm font-semibold text-gray-900">
-                    {tx.market === 'KR'
-                      ? tx.totalAmount.toLocaleString() + '원'
-                      : '$' + tx.totalAmount.toFixed(2)}
+                    {Math.round(tx.totalAmount).toLocaleString()}원
                   </p>
                   {/* 체결 시각 — HH:MM 형식 */}
                   <p className="text-xs text-gray-400">
