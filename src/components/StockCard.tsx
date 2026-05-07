@@ -7,9 +7,7 @@
 import { useNavigate } from 'react-router-dom'
 import type { Stock } from '../types'
 import WatchlistButton from './WatchlistButton'
-
-// 달러→원화 환산 고정 환율 (실시간 환율 없이 근사값 사용)
-const USD_TO_KRW = 1380
+import { useUsdKrw } from '../hooks/useUsdKrw'
 
 interface Props {
   stock: Stock
@@ -36,6 +34,7 @@ function PriceChange({ stock }: { stock: Stock }) {
 
 export default function StockCard({ stock }: Props) {
   const navigate = useNavigate()
+  const { rate: USD_TO_KRW } = useUsdKrw()
 
   // ── 가격 표시 분기 ────────────────────────────
   // 원화와 달러를 같이 표기

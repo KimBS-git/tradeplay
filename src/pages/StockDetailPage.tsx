@@ -19,8 +19,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 
-// 달러→원화 환산 고정 환율
-const USD_TO_KRW = 1380
 const STOCK_PRICE_SYNC_MS = 30_000 // 30초마다 현재가 동기화
 
 import { useStockStore } from '../store/stockStore'
@@ -31,6 +29,7 @@ import TradeModal from '../components/TradeModal'
 import NewsCard from '../components/NewsCard'
 import { useNewsStore } from '../store/newsStore'
 import { getStockDetail } from '../lib/finnhub'
+import { useUsdKrw } from '../hooks/useUsdKrw'
 
 export default function StockDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -40,6 +39,7 @@ export default function StockDetailPage() {
   const [showTradeModal, setShowTradeModal] = useState(false)
   const [isFetchingExternal, setIsFetchingExternal] = useState(false)
   const [fetchError, setFetchError] = useState(false)
+  const { rate: USD_TO_KRW } = useUsdKrw()
 
   // URL 파라미터 id로 해당 종목을 조회한다
   const stock = stocks.find((s) => s.id === id)

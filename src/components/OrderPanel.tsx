@@ -12,6 +12,7 @@ import { useState } from 'react'
 import type { Stock } from '../types'
 import { useStockStore } from '../store/stockStore'
 import { useAuthStore } from '../store/authStore'
+import { useUsdKrw } from '../hooks/useUsdKrw'
 
 type Tab = 'BUY' | 'SELL'
 
@@ -27,13 +28,24 @@ export default function OrderPanel({ stock, onClose, className = '' }: Props) {
   const [result, setResult] = useState<string | null>(null)  // 주문 결과 메시지
   const { buyStock, sellStock, cashBalance, holdings } = useStockStore()
   const { currentUser } = useAuthStore()
+  const { rate: USD_TO_KRW } = useUsdKrw()
 
   const holding = holdings.find((h) => h.stockId === stock.id)
-  const totalCost = stock.price * quantity
+  const unitPriceKrw = stock.market === 'KR' ? stock.price : stock.price * USD_TO_KRW
+  const totalCostKrw = unitPriceKrw * quantity
 
-  // 시장별 가격 포맷 함수 — KR: "N원", US: "$N.NN"
-  const formatPrice = (p: number) =>
-    stock.market === 'KR' ? p.toLocaleString() + '원' : '$' + p.toFixed(2)
+  const formatKRW = (p: number) => Math.round(p).toLocaleString() + '원'
+  const formatUSD = (p: number) => '$' + p.toFixed(2)
+
+  const formatUnitPrice = () =>
+    stock.market === 'KR'
+      ? formatKRW(stock.price)
+      : `${formatKRW(stock.price * USD_TO_KRW)} (${formatUSD(stock.price)})`
+
+  const formatOrderAmount = () =>
+    stock.market === 'KR'
+      ? formatKRW(totalCostKrw)
+      : `${formatKRW(totalCostKrw)} (${formatUSD(stock.price * quantity)})`
 
   // ── 주문 실행 ────────────────────────────────
   // buyStock/sellStock은 성공 여부를 boolean으로 반환한다.
@@ -88,7 +100,7 @@ export default function OrderPanel({ stock, onClose, className = '' }: Props) {
       {/* ── 현재가 표시 ────────────────────────── */}
       <div className="flex justify-between text-xs mb-2">
         <span className="text-gray-500">현재가</span>
-        <span className="font-bold text-gray-900">{formatPrice(stock.price)}</span>
+        <span className="font-bold text-gray-900">{formatUnitPrice()}</span>
       </div>
 
       {/* ── 수량 입력 (- / 직접입력 / +) ──────────
@@ -123,15 +135,13 @@ export default function OrderPanel({ stock, onClose, className = '' }: Props) {
       <div className="bg-white rounded-lg p-3 mb-3 space-y-1 text-xs border border-gray-100">
         <div className="flex justify-between">
           <span className="text-gray-500">주문 금액</span>
-          <span className="font-semibold text-gray-900">{formatPrice(totalCost)}</span>
+          <span className="font-semibold text-gray-900">{formatOrderAmount()}</span>
         </div>
         {tab === 'BUY' && (
           <div className="flex justify-between">
             <span className="text-gray-500">주문 후 잔액</span>
-            <span className={totalCost > cashBalance ? 'text-red-500 font-medium' : 'text-gray-900'}>
-              {stock.market === 'KR'
-                ? (cashBalance - totalCost).toLocaleString() + '원'
-                : '$' + (cashBalance - totalCost).toFixed(2)}
+            <span className={totalCostKrw > cashBalance ? 'text-red-500 font-medium' : 'text-gray-900'}>
+              {formatKRW(cashBalance - totalCostKrw)}
             </span>
           </div>
         )}

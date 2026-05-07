@@ -15,7 +15,7 @@ import type { Stock, Holding, Transaction, MarketIndex, NewsItem } from '../type
 import { isNewsActiveForPrice, NEWS_PRICE_EFFECT_DELAY_MS } from '../lib/newsDrift'
 import { useNewsStore } from './newsStore'
 import { supabase } from '../lib/supabaseClient'
-import { getQuote, getKRBaseline, stockIdToSymbol } from '../lib/finnhub'
+import { getQuote, getKRPrevCloses, stockIdToSymbol } from '../lib/finnhub'
 
 // ── 예약된 뉴스 시세 충격 타입 ────────────────────
 type PendingNewsPriceImpact = {
@@ -209,13 +209,16 @@ export const useStockStore = create<StockState>((set, get) => ({
     for (const stock of krStocks) {
       const symbol = stockIdToSymbol(stock.id)
       if (!symbol) continue
-      const baseline = await getKRBaseline(symbol)
-      if (!baseline) continue
-      const price = baseline
+      const closes = await getKRPrevCloses(symbol)
+      if (!closes?.close) continue
+      const price = closes.close
+      const prevPrice = closes.prevClose ?? closes.close
+      const change = price - prevPrice
+      const changePercent = prevPrice ? (change / prevPrice) * 100 : 0
       set((state) => ({
         stocks: state.stocks.map((s) =>
           s.id === stock.id
-            ? { ...s, price, prevPrice: price, change: 0, changePercent: 0 }
+            ? { ...s, price, prevPrice, change, changePercent }
             : s
         ),
       }))

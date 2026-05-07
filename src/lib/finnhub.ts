@@ -123,18 +123,30 @@ export async function getKRQuote(symbol: string): Promise<{
 
 // ── Yahoo Finance 한국 종목 기준가 조회(고정용) ─────────
 // "실시간 무료"가 어려울 때, 당일 시가(없으면 전일 종가)를 기준가로 사용한다.
-export async function getKRBaseline(symbol: string): Promise<number | null> {
+export async function getKRPrevCloses(symbol: string): Promise<{ close: number; prevClose: number | null } | null> {
   try {
     const res = await fetch(
-      `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`,
+      `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=5d`,
       { headers: { Accept: 'application/json' } }
     )
     const data = await res.json()
-    const meta = data?.chart?.result?.[0]?.meta
-    const prevClose = meta?.previousClose
-    // 요청: KR은 전일 종가로 고정
-    if (!prevClose || Number(prevClose) === 0) return null
-    return Number(prevClose)
+    const result = data?.chart?.result?.[0]
+    const closes: unknown[] = result?.indicators?.quote?.[0]?.close ?? []
+    if (!Array.isArray(closes) || closes.length === 0) return null
+
+    // 뒤에서부터 유효한 종가 2개(전일, 전전일)를 찾는다.
+    const valid: number[] = []
+    for (let i = closes.length - 1; i >= 0; i--) {
+      const v = closes[i]
+      const n = typeof v === 'number' ? v : Number(v)
+      if (!Number.isFinite(n) || n === 0) continue
+      valid.push(n)
+      if (valid.length >= 2) break
+    }
+    if (valid.length === 0) return null
+
+    // valid[0] = 가장 최근 종가(전일), valid[1] = 전전일 종가(없을 수도)
+    return { close: valid[0], prevClose: valid[1] ?? null }
   } catch {
     return null
   }
