@@ -14,6 +14,7 @@ interface WatchlistState {
   toggle: (stockId: string) => void
   isWatched: (stockId: string) => boolean
   loadWatchlist: (userId: string) => Promise<void>
+  reset: () => void
 }
 
 export const useWatchlistStore = create<WatchlistState>((set, get) => ({
@@ -65,4 +66,7 @@ export const useWatchlistStore = create<WatchlistState>((set, get) => ({
       set({ watchlist: data.map((w) => w.stock_id) })
     }
   },
+
+  // ── 로그아웃 시 로컬 상태 초기화 ─────────────────
+  reset: () => set({ watchlist: [] }),
 }))

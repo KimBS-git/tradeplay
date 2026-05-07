@@ -10,6 +10,8 @@
 import { create } from 'zustand'
 import type { User } from '../types'
 import { supabase } from '../lib/supabaseClient'
+import { useWatchlistStore } from './watchlistStore'
+import { useStockStore } from './stockStore'
 
 // username을 Supabase Auth용 이메일로 변환
 function toEmail(username: string) {
@@ -158,10 +160,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   // ── 로그아웃 ────────────────────────────────────────
-  // Supabase 세션을 삭제하고 로컬 상태를 초기화한다.
+  // Supabase 세션을 삭제하고 모든 유저별 로컬 상태를 초기화한다.
+  // watchlist·holdings·transactions를 함께 지워야 다음 유저가
+  // 이전 유저의 데이터를 보지 않는다.
   logout: async () => {
     await supabase.auth.signOut()
     set({ currentUser: null, users: [] })
+    useWatchlistStore.getState().reset()
+    useStockStore.getState().reset()
   },
 
   // ── 잔액 충전 (관리자 전용) ──────────────────────────

@@ -18,8 +18,7 @@ function formatKRW(n: number) {
 
 export default function AccountPage() {
   const { currentUser: user } = useAuthStore()
-  const { stocks, holdings, transactions, cashBalance, getTotalAsset, getTotalPnl } =
-    useStockStore()
+  const { stocks, holdings, transactions, cashBalance } = useStockStore()
   const navigate = useNavigate()
   const { rate: USD_TO_KRW } = useUsdKrw()
 
@@ -38,11 +37,33 @@ export default function AccountPage() {
     )
   }
 
-  // ── 자산 요약 계산 ────────────────────────────
-  const totalAsset = getTotalAsset()
-  const totalPnl = getTotalPnl()
-  // 초기 시드머니(1,000만원) 대비 수익률로 계산
-  const totalPnlRate = ((totalAsset - 10_000_000) / 10_000_000) * 100
+  // ── 자산 요약 계산 (환율 적용, 전액 원화 기준) ───────
+  const toKrw = (market: 'KR' | 'US', price: number) =>
+    market === 'US' ? price * USD_TO_KRW : price
+
+  // 보유 주식 평가금액 합계 (KRW)
+  const totalStockValue = holdings.reduce((sum, h) => {
+    const stock = stocks.find((s) => s.id === h.stockId)
+    return stock ? sum + toKrw(stock.market, stock.price) * h.quantity : sum
+  }, 0)
+
+  // 총 자산 = 보유 현금 + 보유 주식 평가금액
+  const totalAsset = cashBalance + totalStockValue
+
+  // 평가손익 = Σ (현재가 − 평균매수가) × 수량 (KRW)
+  const totalPnl = holdings.reduce((sum, h) => {
+    const stock = stocks.find((s) => s.id === h.stockId)
+    if (!stock) return sum
+    return sum + (toKrw(stock.market, stock.price) - toKrw(h.market, h.averagePrice)) * h.quantity
+  }, 0)
+
+  // 투자 원가 = Σ 평균매수가 × 수량 (KRW) — 보유 종목 기준
+  const totalInvested = holdings.reduce((sum, h) => {
+    return sum + toKrw(h.market, h.averagePrice) * h.quantity
+  }, 0)
+
+  // 수익률 = 평가손익 / 투자 원가 × 100 (보유 종목 없으면 0%)
+  const totalPnlRate = totalInvested > 0 ? (totalPnl / totalInvested) * 100 : 0
 
   return (
     <div className="space-y-6">
