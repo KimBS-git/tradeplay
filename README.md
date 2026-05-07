@@ -1,4 +1,4 @@
-# TradePlay — 모의 주식 트레이딩 시뮬레이터
+# [TradePlay](https://tradeplay-seven.vercel.app/) — 모의 주식 트레이딩 시뮬레이터
 
 실시간 시세 데이터를 기반으로 한국·미국 주식을 가상 매매할 수 있는 풀스택 웹 애플리케이션입니다.
 
