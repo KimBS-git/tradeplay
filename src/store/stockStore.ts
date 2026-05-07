@@ -1,7 +1,6 @@
 // =====================================================
 // 주식 스토어 (store/stockStore.ts)
-// 주가·보유 종목·거래 내역·시장 지수·뉴스 시세 충격을 관리하고
-// Supabase DB와 동기화한다.
+// 주가·보유 종목·거래 내역·시장 지수를 관리하고 Supabase DB와 동기화한다.
 //
 // DB 동기화 전략:
 //   - buyStock/sellStock: 로컬 상태를 즉시 갱신(UI 반응성 유지)하고
@@ -11,35 +10,9 @@
 
 import { create } from 'zustand'
 import { initialStocks } from '../data/stocks'
-import type { Stock, Holding, Transaction, MarketIndex, NewsItem } from '../types'
-import { isNewsActiveForPrice, NEWS_PRICE_EFFECT_DELAY_MS } from '../lib/newsDrift'
-import { useNewsStore } from './newsStore'
+import type { Stock, Holding, Transaction, MarketIndex } from '../types'
 import { supabase } from '../lib/supabaseClient'
 import { getQuote, getKRSnapshot, stockIdToSymbol } from '../lib/finnhub'
-
-// ── 예약된 뉴스 시세 충격 타입 ────────────────────
-type PendingNewsPriceImpact = {
-  newsId: string
-  stockIds: string[]
-  impact: number
-  effectiveAt: number
-}
-
-// ── 시세 충격 적용 헬퍼 ──────────────────────────
-// ±10% 로 clamp해 주가가 비정상적으로 변하는 것을 방지한다.
-function applyImpactToStocks(stocks: Stock[], stockIds: string[], impactPercent: number): Stock[] {
-  const clampedImpact = Math.max(-0.1, Math.min(0.1, impactPercent / 100))
-  return stocks.map((stock) => {
-    if (!stockIds.includes(stock.id)) return stock
-    const newPrice =
-      stock.market === 'KR'
-        ? Math.round(stock.price * (1 + clampedImpact))
-        : Math.round(stock.price * (1 + clampedImpact) * 100) / 100
-    const change = newPrice - stock.prevPrice
-    const changePercent = (change / stock.prevPrice) * 100
-    return { ...stock, price: newPrice, change, changePercent }
-  })
-}
 
 // ── 스토어 인터페이스 ─────────────────────────────
 interface StockState {
@@ -48,15 +21,9 @@ interface StockState {
   transactions: Transaction[]
   cashBalance: number
   marketIndices: MarketIndex[]
-  mockNewsImpactsApplied: boolean
-  pendingNewsPriceImpacts: PendingNewsPriceImpact[]
   initCash: (balance: number) => void
   setCashBalance: (balance: number) => void
   loadUserData: (userId: string) => Promise<void>
-  ensureMockNewsImpactsApplied: () => void
-  scheduleDelayedNewsPriceImpact: (item: NewsItem) => void
-  flushDueNewsPriceImpacts: () => void
-  applyNewsImpact: (stockIds: string[], impact: number) => void
   addExternalStock: (stock: Stock) => void
   syncRealPrices: () => Promise<void>
   syncKRBaselines: () => Promise<void>
@@ -75,8 +42,6 @@ export const useStockStore = create<StockState>((set, get) => ({
   holdings: [],
   transactions: [],
   cashBalance: INITIAL_CASH,
-  mockNewsImpactsApplied: true,
-  pendingNewsPriceImpacts: [],
   marketIndices: [
     { name: 'KOSPI', value: 2748.32, change: 12.45, changePercent: 0.45 },
     { name: 'NASDAQ', value: 19234.56, change: -45.23, changePercent: -0.23 },
@@ -151,8 +116,6 @@ export const useStockStore = create<StockState>((set, get) => ({
       holdings: [],
       transactions: [],
       stocks: initialStocks,
-      mockNewsImpactsApplied: false,
-      pendingNewsPriceImpacts: [],
     }),
 
   // ── 전체 종목 실시간 가격 동기화 ─────────────────
@@ -214,62 +177,6 @@ export const useStockStore = create<StockState>((set, get) => ({
     const quote = await getQuote(symbol)
     if (!quote) return
     set((state) => ({ stocks: state.stocks.map((s) => (s.id === stockId ? { ...s, ...quote } : s)) }))
-  },
-
-  // ── 초기 mock 뉴스 시세 충격 일괄 적용 ───────────
-  ensureMockNewsImpactsApplied: () => {
-    set((state) => {
-      if (state.mockNewsImpactsApplied) return state
-      let stocks = state.stocks
-      const pending = [...state.pendingNewsPriceImpacts]
-      const feed = useNewsStore.getState().feed
-      const now = Date.now()
-      for (const news of feed) {
-        if (news.sentiment === 'NEUTRAL') continue
-        if (isNewsActiveForPrice(news, now)) {
-          stocks = applyImpactToStocks(stocks, news.relatedStockIds, news.priceImpact)
-        } else if (!pending.some((p) => p.newsId === news.id)) {
-          pending.push({
-            newsId: news.id,
-            stockIds: news.relatedStockIds,
-            impact: news.priceImpact,
-            effectiveAt: new Date(news.publishedAt).getTime() + NEWS_PRICE_EFFECT_DELAY_MS,
-          })
-        }
-      }
-      return { stocks, pendingNewsPriceImpacts: pending, mockNewsImpactsApplied: true }
-    })
-  },
-
-  // ── 뉴스 시세 충격 예약 ──────────────────────────
-  scheduleDelayedNewsPriceImpact: (item: NewsItem) => {
-    if (item.sentiment === 'NEUTRAL') return
-    const effectiveAt = new Date(item.publishedAt).getTime() + NEWS_PRICE_EFFECT_DELAY_MS
-    set((state) => ({
-      pendingNewsPriceImpacts: [
-        ...state.pendingNewsPriceImpacts,
-        { newsId: item.id, stockIds: item.relatedStockIds, impact: item.priceImpact, effectiveAt },
-      ],
-    }))
-  },
-
-  // ── 만료된 예약 충격 반영 ────────────────────────
-  flushDueNewsPriceImpacts: () => {
-    const now = Date.now()
-    set((state) => {
-      const due = state.pendingNewsPriceImpacts.filter((p) => p.effectiveAt <= now)
-      if (due.length === 0) return state
-      let stocks = state.stocks
-      for (const p of due) stocks = applyImpactToStocks(stocks, p.stockIds, p.impact)
-      return {
-        stocks,
-        pendingNewsPriceImpacts: state.pendingNewsPriceImpacts.filter((p) => p.effectiveAt > now),
-      }
-    })
-  },
-
-  applyNewsImpact: (stockIds: string[], impact: number) => {
-    set((state) => ({ stocks: applyImpactToStocks(state.stocks, stockIds, impact) }))
   },
 
   // ── 매수 ────────────────────────────────────────

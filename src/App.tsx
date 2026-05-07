@@ -58,9 +58,6 @@ function SessionRestorer() {
 // - syncRealPrices: 2분마다 Finnhub /quote로 전체 종목 실가를 동기화한다.
 function NewsBootstrapAndLiveFeed() {
   useEffect(() => {
-    // 시뮬레이션 뉴스 시세 충격은 실제 가격을 사용하므로 적용하지 않는다.
-    useStockStore.getState().ensureMockNewsImpactsApplied()
-
     // 한국어 뉴스는 네이버 뉴스 API(프록시)로 로드한다.
     // (Finnhub 시장 뉴스는 기본 비활성화 — 영문 위주라 UX가 섞일 수 있음)
     useNewsStore.getState().loadKoreanMarketNews('증시')

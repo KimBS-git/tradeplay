@@ -45,7 +45,6 @@ my-app/
 │   ├── lib/                        # 외부 API 클라이언트 및 유틸리티
 │   │   ├── finnhub.ts              # Finnhub API 연동
 │   │   ├── naverNews.ts            # Naver 뉴스 API 호출
-│   │   ├── newsDrift.ts            # 뉴스 감성 → 주가 반영 로직
 │   │   ├── supabaseClient.ts       # Supabase 초기화
 │   │   └── fx.ts                   # USD/KRW 환율 조회
 │   │
@@ -160,14 +159,6 @@ my-app/
 #### 환율 적용
 - 미국 주식 카드에서 USD 가격과 함께 KRW 환산가 병행 표시
 - `useUsdKrw` 훅이 1시간 캐시된 환율을 제공
-
-#### 뉴스 → 주가 영향 (newsDrift.ts)
-```
-뉴스 수신 (sentiment: POSITIVE | NEGATIVE | NEUTRAL)
-  └─ POSITIVE / NEGATIVE만 적용
-       └─ 10분 딜레이 후 해당 종목 price에 반영
-            └─ 영향 범위: −10% ~ +10% (priceImpact 필드값 기준)
-```
 
 ---
 
