@@ -20,16 +20,33 @@ import WatchlistButton from '../components/WatchlistButton'
 import TradeModal from '../components/TradeModal'
 import NewsCard from '../components/NewsCard'
 import { useNewsStore } from '../store/newsStore'
+import { getStockDetail } from '../lib/finnhub'
 
 export default function StockDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { stocks, updatePrices } = useStockStore()
+  const { stocks, updatePrices, addExternalStock } = useStockStore()
   const newsFeed = useNewsStore((s) => s.feed)
   const [showTradeModal, setShowTradeModal] = useState(false)
+  const [isFetchingExternal, setIsFetchingExternal] = useState(false)
+  const [fetchError, setFetchError] = useState(false)
 
   // URL 파라미터 id로 해당 종목을 조회한다
   const stock = stocks.find((s) => s.id === id)
+
+  // ── Finnhub 외부 종목 로드 ────────────────────
+  // 'fh-' 접두사를 가진 ID는 Finnhub에서 가져오는 외부 종목이다.
+  // 스토어에 없으면 Finnhub API를 호출해 추가한 뒤 재렌더링된다.
+  useEffect(() => {
+    if (stock || !id?.startsWith('fh-') || isFetchingExternal) return
+    const symbol = id.slice(3) // 'fh-' 제거
+    setIsFetchingExternal(true)
+    getStockDetail(symbol).then((fetched) => {
+      if (fetched) addExternalStock(fetched)
+      else setFetchError(true)
+      setIsFetchingExternal(false)
+    })
+  }, [id, stock, addExternalStock, isFetchingExternal])
 
   // 3초마다 주가 갱신 — PriceChart의 currentPrice prop이 바뀌어 차트가 실시간 업데이트된다
   useEffect(() => {
@@ -37,11 +54,20 @@ export default function StockDetailPage() {
     return () => clearInterval(interval)
   }, [updatePrices])
 
-  // ── 종목 없음 처리 ────────────────────────────
+  // ── 로딩 / 에러 처리 ─────────────────────────
   if (!stock) {
+    if (isFetchingExternal) {
+      return (
+        <div className="flex items-center justify-center py-24">
+          <p className="text-sm text-gray-400">종목 정보를 불러오는 중…</p>
+        </div>
+      )
+    }
     return (
       <div className="flex flex-col items-center justify-center py-24 gap-3">
-        <p className="text-gray-500">종목을 찾을 수 없습니다.</p>
+        <p className="text-gray-500">
+          {fetchError ? '종목 정보를 가져올 수 없습니다.' : '종목을 찾을 수 없습니다.'}
+        </p>
         <button onClick={() => navigate(-1)} className="text-sm text-blue-600 hover:underline">
           돌아가기
         </button>

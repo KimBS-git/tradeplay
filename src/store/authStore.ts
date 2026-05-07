@@ -102,14 +102,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   signup: async (username, password, name) => {
     set({ isLoading: true })
 
-    // 아이디 중복 확인 (profiles.username unique)
-    const { data: existing } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('username', username)
-      .maybeSingle()
-
-    if (existing) {
+    // 아이디 중복 확인
+    // profiles 테이블은 RLS로 비로그인 상태에서 직접 조회가 불가하므로
+    // security definer 함수를 통해 RLS 없이 username 존재 여부만 확인한다.
+    const { data: taken } = await supabase.rpc('is_username_taken', { p_username: username })
+    if (taken) {
       set({ isLoading: false })
       return false
     }

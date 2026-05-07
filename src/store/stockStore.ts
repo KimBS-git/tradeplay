@@ -57,6 +57,7 @@ interface StockState {
   scheduleDelayedNewsPriceImpact: (item: NewsItem) => void
   flushDueNewsPriceImpacts: () => void
   applyNewsImpact: (stockIds: string[], impact: number) => void
+  addExternalStock: (stock: Stock) => void
   buyStock: (stockId: string, quantity: number) => boolean
   sellStock: (stockId: string, quantity: number) => boolean
   getTotalAsset: () => number
@@ -125,6 +126,21 @@ export const useStockStore = create<StockState>((set, get) => ({
       transactions,
       cashBalance: profileRes.data?.cash_balance ?? INITIAL_CASH,
     })
+  },
+
+  // ── 외부 종목 추가 (Finnhub 검색 결과) ──────────────
+  // 로컬 상태에 추가하고, Supabase stocks 테이블에도 upsert한다.
+  // pg_cron의 generate_news_item()이 테이블을 읽으므로
+  // 다음 실행부터 이 종목도 뉴스 생성 대상에 포함된다.
+  addExternalStock: (stock: Stock) => {
+    set((state) => {
+      if (state.stocks.find((s) => s.id === stock.id)) return state
+      return { stocks: [...state.stocks, stock] }
+    })
+    supabase
+      .from('stocks')
+      .upsert({ id: stock.id, name: stock.name }, { onConflict: 'id' })
+      .then(() => {})
   },
 
   // ── 전체 초기화 ──────────────────────────────────
