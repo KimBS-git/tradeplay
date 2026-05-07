@@ -21,6 +21,13 @@ import { getKoreanMarketNews } from '../lib/naverNews'
 // 피드 최대 보관 건수 — 초과 시 오래된 항목을 잘라낸다.
 const MAX_FEED = 120
 
+// publishedAt 내림차순 정렬 — 언어·출처와 무관하게 최신 뉴스가 상단에 온다.
+function sortByDate(items: NewsItem[]): NewsItem[] {
+  return items.slice().sort(
+    (a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
+  )
+}
+
 // ── DB 행 → NewsItem 변환 ──────────────────────────
 // Supabase에서 받은 snake_case 행을 camelCase NewsItem으로 매핑한다.
 function rowToNewsItem(row: Record<string, unknown>): NewsItem {
@@ -66,7 +73,7 @@ export const useNewsStore = create<NewsStoreState>((set) => ({
     set((s) => {
       const existingIds = new Set(s.feed.map((i) => i.id))
       const newItems = items.filter((i) => !existingIds.has(i.id))
-      return { feed: [...newItems, ...s.feed].slice(0, MAX_FEED) }
+      return { feed: sortByDate([...newItems, ...s.feed]).slice(0, MAX_FEED) }
     })
   },
 
@@ -77,7 +84,7 @@ export const useNewsStore = create<NewsStoreState>((set) => ({
     set((s) => {
       const existingIds = new Set(s.feed.map((i) => i.id))
       const newItems = items.filter((i) => !existingIds.has(i.id))
-      return { feed: [...newItems, ...s.feed].slice(0, MAX_FEED) }
+      return { feed: sortByDate([...newItems, ...s.feed]).slice(0, MAX_FEED) }
     })
   },
 
@@ -104,7 +111,7 @@ export const useNewsStore = create<NewsStoreState>((set) => ({
         const newItems = items
           .filter((i) => !existingIds.has(i.id))
           .map((i) => ({ ...i, relatedStockIds: [stockId] }))
-        return { feed: [...newItems, ...updatedFeed].slice(0, MAX_FEED) }
+        return { feed: sortByDate([...newItems, ...updatedFeed]).slice(0, MAX_FEED) }
       })
     } else {
       const items = await getCompanyNews(stockId)
@@ -112,7 +119,7 @@ export const useNewsStore = create<NewsStoreState>((set) => ({
       set((s) => {
         const existingIds = new Set(s.feed.map((i) => i.id))
         const newItems = items.filter((i) => !existingIds.has(i.id))
-        return { feed: [...newItems, ...s.feed].slice(0, MAX_FEED) }
+        return { feed: sortByDate([...newItems, ...s.feed]).slice(0, MAX_FEED) }
       })
     }
   },
@@ -133,10 +140,10 @@ export const useNewsStore = create<NewsStoreState>((set) => ({
 
     set((s) => {
       const existingIds = new Set(dbItems.map((i) => i.id))
-      const merged = [
+      const merged = sortByDate([
         ...dbItems,
         ...s.feed.filter((i) => !existingIds.has(i.id)),
-      ].slice(0, MAX_FEED)
+      ]).slice(0, MAX_FEED)
       return { feed: merged }
     })
   },
@@ -145,6 +152,6 @@ export const useNewsStore = create<NewsStoreState>((set) => ({
   // App.tsx Realtime 핸들러가 INSERT 이벤트를 받으면 이 메서드를 호출한다.
   // MAX_FEED 초과 시 slice로 잘라 메모리를 일정하게 유지한다.
   prependItem: (item: NewsItem) => {
-    set((s) => ({ feed: [item, ...s.feed].slice(0, MAX_FEED) }))
+    set((s) => ({ feed: sortByDate([item, ...s.feed]).slice(0, MAX_FEED) }))
   },
 }))

@@ -14,13 +14,20 @@ import { useStockStore } from '../store/stockStore'
 import { useAuthStore } from '../store/authStore'
 import { useUsdKrw } from '../hooks/useUsdKrw'
 
-// 평일 09:00~16:00 KST 범위인지 확인한다.
+// KST 기준 평일 09:00~16:00 인지 확인한다.
 function isKRMarketOpen(): boolean {
   const kst = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }))
   const day = kst.getDay() // 0=일, 6=토
   if (day === 0 || day === 6) return false
   const minutes = kst.getHours() * 60 + kst.getMinutes()
   return minutes >= 9 * 60 && minutes < 16 * 60
+}
+
+// 미국 동부 기준 평일인지 확인한다 (주말 거래 차단).
+function isUSMarketWeekday(): boolean {
+  const est = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }))
+  const day = est.getDay() // 0=일, 6=토
+  return day !== 0 && day !== 6
 }
 
 type Tab = 'BUY' | 'SELL'
@@ -42,7 +49,7 @@ export default function OrderPanel({ stock, onClose, className = '' }: Props) {
   const holding = holdings.find((h) => h.stockId === stock.id)
   const unitPriceKrw = stock.market === 'KR' ? stock.price : stock.price * USD_TO_KRW
   const totalCostKrw = Math.round(unitPriceKrw * quantity)
-  const marketClosed = stock.market === 'KR' && !isKRMarketOpen()
+  const marketClosed = stock.market === 'KR' ? !isKRMarketOpen() : !isUSMarketWeekday()
   const maxBuyQty = Math.max(1, Math.floor(cashBalance / unitPriceKrw))
 
   const formatKRW = (p: number) => Math.round(p).toLocaleString() + '원'
@@ -76,7 +83,7 @@ export default function OrderPanel({ stock, onClose, className = '' }: Props) {
   const buttonDisabled = !currentUser || marketClosed || insufficientBalance || insufficientHolding
   const buttonLabel = (() => {
     if (!currentUser) return '로그인 후 거래 가능'
-    if (marketClosed) return '장 마감 (09:00 ~ 16:00)'
+    if (marketClosed) return stock.market === 'KR' ? '장 마감 (09:00 ~ 16:00)' : '주말 거래 불가'
     if (insufficientBalance) return '잔액 부족'
     if (insufficientHolding) return '수량 부족'
     return tab === 'BUY' ? `${quantity}주 매수` : `${quantity}주 매도`
@@ -101,7 +108,9 @@ export default function OrderPanel({ stock, onClose, className = '' }: Props) {
       {/* ── 장 마감 안내 배너 ────────────────────── */}
       {marketClosed && (
         <div className="mb-3 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-700 text-center">
-          국내 주식 거래 시간 외 (평일 09:00 ~ 16:00)
+          {stock.market === 'KR'
+            ? '국내 주식 거래 시간 외 (평일 09:00 ~ 16:00)'
+            : '주말에는 미국 주식 거래가 불가합니다'}
         </div>
       )}
 
