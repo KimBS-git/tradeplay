@@ -98,7 +98,11 @@ export default function SearchPage() {
             {finnhubResults.map((r) => (
               <button
                 key={r.symbol}
-                onClick={() => navigate(`/stock/${encodeURIComponent(symbolToId(r.symbol))}`)}
+                onClick={() => {
+                  const id = encodeURIComponent(symbolToId(r.symbol))
+                  const hint = r.description ? `?hint=${encodeURIComponent(r.description)}` : ''
+                  navigate(`/stock/${id}${hint}`)
+                }}
                 className="bg-white rounded-xl border border-gray-100 p-4 flex items-center justify-between hover:border-blue-200 hover:shadow-sm transition text-left"
               >
                 <div>

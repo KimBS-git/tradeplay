@@ -139,7 +139,9 @@ export async function getKRSnapshot(symbol: string): Promise<{
 // 미국 주식: Finnhub profile2 + quote 병렬 호출
 // 한국 주식: Finnhub quote는 무료 플랜에서 KR을 지원하지 않으므로
 //            Yahoo Finance 프록시(getKRSnapshot)로 가격을 가져온다.
-export async function getStockDetail(symbol: string): Promise<Stock | null> {
+// nameHint: 검색 결과에서 알고 있는 회사명. Finnhub profile2가 KR 종목명을 반환하지
+//           않을 때 폴백으로 사용한다.
+export async function getStockDetail(symbol: string, nameHint = ''): Promise<Stock | null> {
   if (!KEY) return null
   try {
     const { market, code } = parseSymbol(symbol)
@@ -156,11 +158,12 @@ export async function getStockDetail(symbol: string): Promise<Stock | null> {
       const prevPrice = snap.previousCloseMeta ?? snap.prevClose ?? snap.close
       const change = price - prevPrice
       const changePercent = prevPrice ? (change / prevPrice) * 100 : 0
+      const name = profile?.name || nameHint || code
 
       return {
         id: symbolToId(symbol),
-        name: profile?.name || code,
-        nameEn: profile?.name || code,
+        name,
+        nameEn: name,
         code,
         market,
         price,
@@ -221,6 +224,32 @@ function articleToNewsItem(article: FinnhubArticle, relatedStockIds: string[]): 
     sentiment: 'NEUTRAL',
     priceImpact: 0,
     publishedAt: new Date(article.datetime * 1000).toISOString(),
+  }
+}
+
+// ── 실제 OHLC 캔들 데이터 조회 ──────────────────────
+// Yahoo Finance 프록시(/api/candles)에서 기간별 실제 캔들을 가져온다.
+// 실패 시 빈 배열을 반환해 호출부에서 합성 데이터로 폴백하도록 한다.
+export interface CandleData {
+  time: number   // Unix 초 단위
+  open: number
+  high: number
+  low: number
+  close: number
+}
+
+export async function fetchCandles(stockId: string, period: string): Promise<CandleData[]> {
+  const symbol = stockIdToSymbol(stockId)
+  if (!symbol) return []
+  try {
+    const res = await fetch(
+      `/api/candles?symbol=${encodeURIComponent(symbol)}&period=${encodeURIComponent(period)}`
+    )
+    if (!res.ok) return []
+    const data = await res.json()
+    return Array.isArray(data?.candles) ? data.candles : []
+  } catch {
+    return []
   }
 }
 

@@ -15,6 +15,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { createChart, CandlestickSeries } from 'lightweight-charts'
+import { fetchCandles } from '../lib/finnhub'
 
 type Period = '1h' | '1d' | '1w' | '1M' | '1y'
 
@@ -191,6 +192,7 @@ export default function PriceChart({ stockId, currentPrice, market }: Props) {
   const periodRef = useRef<Period>('1d')  // 최신 period를 closure 없이 참조하기 위한 ref
 
   const [period, setPeriod] = useState<Period>('1d')
+  const [isLoading, setIsLoading] = useState(true)
   const [summary, setSummary] = useState({ isUp: true, diff: 0, diffPct: 0, open: currentPrice })
 
   // ── 차트 초기화 (마운트 1회) ───────────────────
@@ -255,28 +257,39 @@ export default function PriceChart({ stockId, currentPrice, market }: Props) {
     }
   }, [])
 
-  // ── 기간 전환 시 데이터 재생성 ────────────────
-  // period 또는 stockId가 바뀔 때 새 캔들 배열을 생성해 차트에 교체한다.
-  // currentPrice를 의존성에서 제외한 이유:
-  //   가격이 바뀔 때마다 전체 데이터를 재생성하면 불필요하게 비용이 크다.
-  //   가격 변동은 아래 useEffect에서 마지막 캔들만 update()한다.
+  // ── 기간 전환 시 실제 데이터 fetch ───────────
+  // Yahoo Finance 프록시에서 실제 OHLC 캔들을 가져온다.
+  // fetch 실패 또는 데이터 부족 시 합성 데이터로 폴백한다.
+  // currentPrice를 의존성에서 제외: 가격 변동은 아래 useEffect에서 마지막 캔들만 update()한다.
   useEffect(() => {
     if (!seriesRef.current) return
     periodRef.current = period
+    setIsLoading(true)
 
-    const candles = generateCandles(currentPrice, period, market)
-    seriesRef.current.setData(candles)
-    chartRef.current?.timeScale().fitContent()
+    let cancelled = false
 
-    const last = candles[candles.length - 1]
-    currentCandleRef.current = { ...last }
-    lastCandleStartRef.current = Date.now()
+    fetchCandles(stockId, period).then((fetched) => {
+      if (cancelled || !seriesRef.current) return
 
-    // 차트 기간 전체 등락 요약 계산 (첫 캔들 시가 → 마지막 캔들 종가)
-    const firstOpen = candles[0].open
-    const diff = last.close - firstOpen
-    const diffPct = (diff / firstOpen) * 100
-    setSummary({ isUp: diff >= 0, diff, diffPct, open: firstOpen })
+      const candles = fetched.length >= 2
+        ? fetched
+        : generateCandles(currentPrice, period, market)
+
+      seriesRef.current.setData(candles)
+      chartRef.current?.timeScale().fitContent()
+
+      const last = candles[candles.length - 1]
+      currentCandleRef.current = { ...last }
+      lastCandleStartRef.current = Date.now()
+
+      const firstOpen = candles[0].open
+      const diff = last.close - firstOpen
+      const diffPct = (diff / firstOpen) * 100
+      setSummary({ isUp: diff >= 0, diff, diffPct, open: firstOpen })
+      setIsLoading(false)
+    })
+
+    return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [period, stockId])
 
@@ -374,7 +387,14 @@ export default function PriceChart({ stockId, currentPrice, market }: Props) {
       </div>
 
       {/* 차트 컨테이너 — lightweight-charts가 이 div에 canvas를 삽입한다 */}
-      <div ref={containerRef} className="w-full rounded-xl overflow-hidden" />
+      <div className="relative">
+        <div ref={containerRef} className="w-full rounded-xl overflow-hidden" />
+        {isLoading && (
+          <div className="absolute inset-0 flex items-center justify-center bg-white/70 rounded-xl">
+            <p className="text-xs text-gray-400">차트 로딩 중…</p>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

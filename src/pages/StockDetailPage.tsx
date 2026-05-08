@@ -17,7 +17,7 @@
 // =====================================================
 
 import { useEffect, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 
 const STOCK_PRICE_SYNC_MS = 30_000 // 30초마다 현재가 동기화
 
@@ -34,6 +34,8 @@ import { useUsdKrw } from '../hooks/useUsdKrw'
 export default function StockDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const nameHint = searchParams.get('hint') ?? ''
   const { stocks, syncStockPrice, addExternalStock } = useStockStore()
   const { feed: newsFeed, loadCompanyNews } = useNewsStore()
   const [showTradeModal, setShowTradeModal] = useState(false)
@@ -51,7 +53,7 @@ export default function StockDetailPage() {
     if (stock || !id?.startsWith('fh-') || isFetchingExternal) return
     const symbol = id.slice(3) // 'fh-' 제거
     setIsFetchingExternal(true)
-    getStockDetail(symbol).then((fetched) => {
+    getStockDetail(symbol, nameHint).then((fetched) => {
       if (fetched) addExternalStock(fetched)
       else setFetchError(true)
       setIsFetchingExternal(false)
