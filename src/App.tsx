@@ -25,6 +25,7 @@ import { useAuthStore } from './store/authStore'
 import { useWatchlistStore } from './store/watchlistStore'
 
 const REAL_PRICE_SYNC_MS = 2 * 60 * 1000 // 2분마다 실제 가격 동기화
+const NEWS_SYNC_MS = 5 * 60 * 1000       // 5분마다 뉴스 갱신
 
 // ── Supabase 세션 복원 컴포넌트 ─────────────────────
 // 앱 시작 시 브라우저에 저장된 Supabase 세션이 있으면 자동으로 로그인 상태를 복원한다.
@@ -73,10 +74,15 @@ function NewsBootstrapAndLiveFeed() {
       () => useStockStore.getState().syncKRBaselines(),
       REAL_PRICE_SYNC_MS
     )
+    const newsSyncId = window.setInterval(
+      () => useNewsStore.getState().loadKoreanMarketNews('증시'),
+      NEWS_SYNC_MS
+    )
 
     return () => {
       window.clearInterval(usSyncId)
       window.clearInterval(krSyncId)
+      window.clearInterval(newsSyncId)
     }
   }, [])
   return null
