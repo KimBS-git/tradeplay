@@ -20,9 +20,6 @@ export default function NewsPage() {
       {/* ── 페이지 헤더 및 안내 문구 ─────────────── */}
       <div>
         <h1 className="text-lg font-bold text-gray-900">금융 뉴스</h1>
-        {/* 뉴스-시세 연동 지연 정책을 유저에게 명시적으로 안내한다 */}
-        <p className="text-xs text-gray-400 mt-1">
-        </p>
       </div>
 
       {/* ── 뉴스 카드 목록 ───────────────────────── */}
