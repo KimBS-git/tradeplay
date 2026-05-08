@@ -143,7 +143,7 @@ export const useStockStore = create<StockState>((set, get) => ({
   // 등락은 항상 "전일 종가(prevClose)" 대비로 계산해 색/지표가 일관되게 한다.
   // 앱 시작 시 1회 + 이후 인터벌(120s)에서 반복 호출되어 준실시간으로 갱신된다.
   syncKRBaselines: async () => {
-    const krStocks = get().stocks.filter((s) => s.market === 'KR' && s.id.startsWith('kr-'))
+    const krStocks = get().stocks.filter((s) => s.market === 'KR')
     for (const stock of krStocks) {
       const symbol = stockIdToSymbol(stock.id)
       if (!symbol) continue

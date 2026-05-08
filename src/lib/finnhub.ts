@@ -136,11 +136,43 @@ export async function getKRSnapshot(symbol: string): Promise<{
 }
 
 // ── 회사 정보 + 현재가 조회 ──────────────────────────
-// profile2와 quote를 병렬로 호출해 응답 시간을 줄인다.
-// 가격이 0이거나 회사명이 없으면 null 반환(상장 폐지·미지원 종목 필터링).
+// 미국 주식: Finnhub profile2 + quote 병렬 호출
+// 한국 주식: Finnhub quote는 무료 플랜에서 KR을 지원하지 않으므로
+//            Yahoo Finance 프록시(getKRSnapshot)로 가격을 가져온다.
 export async function getStockDetail(symbol: string): Promise<Stock | null> {
   if (!KEY) return null
   try {
+    const { market, code } = parseSymbol(symbol)
+
+    if (market === 'KR') {
+      const [profileRes, snap] = await Promise.all([
+        fetch(`${BASE}/stock/profile2?symbol=${encodeURIComponent(symbol)}&token=${KEY}`),
+        getKRSnapshot(symbol),
+      ])
+      const profile = await profileRes.json()
+      if (!snap) return null
+
+      const price = snap.regularMarketPrice ?? snap.regularMarketOpen ?? snap.close
+      const prevPrice = snap.previousCloseMeta ?? snap.prevClose ?? snap.close
+      const change = price - prevPrice
+      const changePercent = prevPrice ? (change / prevPrice) * 100 : 0
+
+      return {
+        id: symbolToId(symbol),
+        name: profile?.name || code,
+        nameEn: profile?.name || code,
+        code,
+        market,
+        price,
+        prevPrice,
+        change,
+        changePercent,
+        volume: 0,
+        sector: profile?.finnhubIndustry ?? 'Other',
+      }
+    }
+
+    // 미국 주식: Finnhub profile2 + quote
     const [profileRes, quoteRes] = await Promise.all([
       fetch(`${BASE}/stock/profile2?symbol=${encodeURIComponent(symbol)}&token=${KEY}`),
       fetch(`${BASE}/quote?symbol=${encodeURIComponent(symbol)}&token=${KEY}`),
@@ -148,8 +180,6 @@ export async function getStockDetail(symbol: string): Promise<Stock | null> {
     const [profile, quote] = await Promise.all([profileRes.json(), quoteRes.json()])
 
     if (!profile?.name || !quote?.c) return null
-
-    const { market, code } = parseSymbol(symbol)
 
     return {
       id: symbolToId(symbol),
